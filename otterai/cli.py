@@ -209,6 +209,26 @@ def speeches_search(query: str, speech_id: str, size: int, as_json: bool):
         click.echo(json.dumps(result["data"], indent=2))
 
 
+@speeches.command("rename")
+@click.argument("speech_id")
+@click.argument("title")
+def speeches_rename(speech_id: str, title: str):
+    """Rename a speech (set new title)."""
+    client = get_authenticated_client()
+
+    try:
+        result = client.set_speech_title(speech_id, title)
+    except OtterAIException as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    if result["status"] != 200:
+        click.echo(f"Rename failed: {result}", err=True)
+        sys.exit(1)
+
+    click.echo(f"Renamed speech {speech_id} to: {title}")
+
+
 @speeches.command("download")
 @click.argument("speech_id")
 @click.option(

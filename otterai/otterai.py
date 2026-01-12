@@ -91,6 +91,17 @@ class OtterAI:
 
         return self._handle_response(response)
 
+    def set_speech_title(self, speech_id, title):
+        set_title_url = OtterAI.API_BASE_URL + "set_speech_title"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        payload = {"otid": speech_id, "title": title}
+
+        response = self._session.get(set_title_url, params=payload)
+
+        return self._handle_response(response)
+
     def query_speech(self, query, speech_id, size=500):
         query_speech_url = OtterAI.API_BASE_URL + "advanced_search"
 

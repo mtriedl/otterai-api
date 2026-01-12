@@ -76,6 +76,9 @@ otter speeches upload recording.mp4
 
 # Move to trash
 otter speeches trash SPEECH_ID
+
+# Rename a speech
+otter speeches rename SPEECH_ID "New Title"
 ```
 
 ### Speakers
