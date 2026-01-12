@@ -6,6 +6,7 @@ Unofficial Python API for [otter.ai](http://otter.ai)
 
 -   [Installation](#installation)
 -   [Setup](#setup)
+-   [CLI](#cli)
 -   [APIs](#apis)
     -   [User](#user)
     -   [Speeches](#speeches)
@@ -33,6 +34,87 @@ pip install .
 from otterai import OtterAI
 otter = OtterAI()
 otter.login('USERNAME', 'PASSWORD')
+```
+
+## CLI
+
+A command-line interface is also available for interacting with Otter.ai.
+
+### Authentication
+
+```bash
+# Login (saves credentials to ~/.otterai/config.json)
+otter login
+
+# Logout (clears saved credentials)
+otter logout
+
+# View current user
+otter user
+```
+
+### Speeches
+
+```bash
+# List all speeches
+otter speeches list
+
+# List with options
+otter speeches list --page-size 10 --source owned
+
+# Get a specific speech
+otter speeches get SPEECH_ID
+
+# Search within a speech
+otter speeches search "search query" SPEECH_ID
+
+# Download a speech (formats: txt, pdf, mp3, docx, srt)
+otter speeches download SPEECH_ID --format txt
+
+# Upload an audio file
+otter speeches upload recording.mp4
+
+# Move to trash
+otter speeches trash SPEECH_ID
+```
+
+### Speakers
+
+```bash
+# List all speakers
+otter speakers list
+
+# Create a new speaker
+otter speakers create "Speaker Name"
+```
+
+### Folders and Groups
+
+```bash
+# List folders
+otter folders list
+
+# List groups
+otter groups list
+```
+
+### Configuration
+
+```bash
+# Show current config
+otter config show
+
+# Clear saved config
+otter config clear
+```
+
+### JSON Output
+
+Most commands support `--json` flag for machine-readable output:
+
+```bash
+otter speeches list --json
+otter speakers list --json
 ```
 
 ## APIs
