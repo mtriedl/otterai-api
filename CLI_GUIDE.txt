@@ -27,6 +27,8 @@ otter speeches search "keyword" <id>        Search within transcript
 otter speeches upload recording.mp4         Upload audio for transcription
 otter speeches trash <id>                   Move to trash
 otter speeches rename <id> "New Title"      Rename a speech
+otter speeches move <id> --folder <folder_id>      Move to folder
+otter speeches move <id1> <id2> --folder <folder_id>   Move multiple
 
 
 SPEAKERS
@@ -41,6 +43,8 @@ otter speakers tag <speech_id> <speaker_id> --all           Tag all segments
 ORGANIZATION
 ------------
 otter folders list                          List folders
+otter folders create "Folder Name"          Create new folder
+otter folders rename <folder_id> "New Name" Rename folder
 otter groups list                           List groups
 
 

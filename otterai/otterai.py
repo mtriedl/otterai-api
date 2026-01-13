@@ -293,6 +293,86 @@ class OtterAI:
 
         return self._handle_response(response)
 
+    def create_folder(self, folder_name):
+        """Create a new folder.
+
+        Args:
+            folder_name: Name for the new folder
+
+        Returns:
+            Response dict with status and data including new folder ID
+        """
+        create_folder_url = OtterAI.API_BASE_URL + "create_folder"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        data = {"folder_name": folder_name}
+        headers = {
+            "x-csrftoken": self._cookies["csrftoken"],
+            "referer": "https://otter.ai/",
+        }
+        response = self._session.post(
+            create_folder_url, headers=headers, data=data
+        )
+
+        return self._handle_response(response)
+
+    def rename_folder(self, folder_id, new_name):
+        """Rename an existing folder.
+
+        Args:
+            folder_id: ID of the folder to rename
+            new_name: New name for the folder
+
+        Returns:
+            Response dict with status and data
+        """
+        rename_folder_url = OtterAI.API_BASE_URL + "rename_folder"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        payload = {"userid": self._userid, "folder_id": folder_id}
+        data = {"new_name": new_name}
+        headers = {
+            "x-csrftoken": self._cookies["csrftoken"],
+            "referer": "https://otter.ai/",
+        }
+        response = self._session.post(
+            rename_folder_url, params=payload, headers=headers, data=data
+        )
+
+        return self._handle_response(response)
+
+    def add_folder_speeches(self, folder_id, speech_ids):
+        """Move speeches to a folder.
+
+        Args:
+            folder_id: ID of the destination folder
+            speech_ids: Single speech ID string or list of speech IDs
+
+        Returns:
+            Response dict with status and data
+        """
+        add_folder_speeches_url = OtterAI.API_BASE_URL + "add_folder_speeches"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        # Handle both single ID and list
+        if isinstance(speech_ids, str):
+            speech_ids = [speech_ids]
+
+        payload = {"userid": self._userid, "folder_id": folder_id}
+        data = {"speech_otid_list": speech_ids}
+        headers = {
+            "x-csrftoken": self._cookies["csrftoken"],
+            "referer": "https://otter.ai/",
+        }
+        response = self._session.post(
+            add_folder_speeches_url, params=payload, headers=headers, data=data
+        )
+
+        return self._handle_response(response)
+
     def speech_start(self):
         speech_start_uel = OtterAI.API_BASE_URL + "speech_start"
         ### TODO
