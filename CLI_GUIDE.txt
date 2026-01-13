@@ -33,6 +33,9 @@ SPEAKERS
 --------
 otter speakers list                         List all speakers
 otter speakers create "Name"                Create new speaker
+otter speakers tag <speech_id> <speaker_id>                 List transcript segments
+otter speakers tag <speech_id> <speaker_id> -t <uuid>       Tag specific segment
+otter speakers tag <speech_id> <speaker_id> --all           Tag all segments
 
 
 ORGANIZATION

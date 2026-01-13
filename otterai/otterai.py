@@ -235,6 +235,36 @@ class OtterAI:
 
         return self._handle_response(response)
 
+    def set_transcript_speaker(self, speech_id, transcript_uuid, speaker_id, speaker_name, create_speaker=False):
+        """Tag a speaker on a specific transcript segment.
+
+        Args:
+            speech_id: The speech/conversation otid
+            transcript_uuid: UUID of the specific transcript segment
+            speaker_id: ID of existing speaker (from get_speakers)
+            speaker_name: Name of the speaker
+            create_speaker: If True, create new speaker if not exists
+
+        Returns:
+            Response dict with status and data
+        """
+        set_speaker_url = OtterAI.API_BASE_URL + "set_transcript_speaker"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        payload = {
+            "speech_otid": speech_id,
+            "transcript_uuid": transcript_uuid,
+            "speaker_name": speaker_name,
+            "userid": self._userid,
+            "create_speaker": str(create_speaker).lower(),
+            "speaker_id": speaker_id,
+        }
+
+        response = self._session.get(set_speaker_url, params=payload)
+
+        return self._handle_response(response)
+
     def get_notification_settings(self):
         notification_settings_url = OtterAI.API_BASE_URL + "get_notification_settings"
         response = self._session.get(notification_settings_url)
