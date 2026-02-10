@@ -228,7 +228,10 @@ class OtterAI:
         payload = {"userid": self._userid}
 
         data = {"speaker_name": speaker_name}
-        headers = {"x-csrftoken": self._cookies["csrftoken"]}
+        headers = {
+            "x-csrftoken": self._cookies.get("csrftoken", ""),
+            "referer": "https://otter.ai/",
+        }
         response = self._session.post(
             create_speaker_url, params=payload, headers=headers, data=data
         )
@@ -261,7 +264,11 @@ class OtterAI:
             "speaker_id": speaker_id,
         }
 
-        response = self._session.get(set_speaker_url, params=payload)
+        headers = {
+            "referer": "https://otter.ai/",
+            "x-csrftoken": self._cookies.get("csrftoken", ""),
+        }
+        response = self._session.get(set_speaker_url, params=payload, headers=headers)
 
         return self._handle_response(response)
 
