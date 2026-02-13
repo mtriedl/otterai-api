@@ -53,6 +53,13 @@ otter logout
 otter user
 ```
 
+You can also set credentials via environment variables (these take precedence over the config file):
+
+```bash
+export OTTERAI_USERNAME="your-email@example.com"
+export OTTERAI_PASSWORD="your-password"
+```
+
 ### Speeches
 
 ```bash

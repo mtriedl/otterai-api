@@ -128,3 +128,33 @@ def test_get_folders_invalid_userid():
 def test_stop_speech():
     otter = OtterAI()
     otter.stop_speech()
+
+
+def test_set_speech_title_invalid_userid():
+    otter = OtterAI()
+    with pytest.raises(OtterAIException, match="userid is invalid"):
+        otter.set_speech_title("dummyid", "New Title")
+
+
+def test_set_transcript_speaker_invalid_userid():
+    otter = OtterAI()
+    with pytest.raises(OtterAIException, match="userid is invalid"):
+        otter.set_transcript_speaker("dummyid", "dummy_uuid", "speaker1", "John Doe")
+
+
+def test_create_folder_invalid_userid():
+    otter = OtterAI()
+    with pytest.raises(OtterAIException, match="userid is invalid"):
+        otter.create_folder("Test Folder")
+
+
+def test_rename_folder_invalid_userid():
+    otter = OtterAI()
+    with pytest.raises(OtterAIException, match="userid is invalid"):
+        otter.rename_folder("folder123", "New Name")
+
+
+def test_add_folder_speeches_invalid_userid():
+    otter = OtterAI()
+    with pytest.raises(OtterAIException, match="userid is invalid"):
+        otter.add_folder_speeches("folder123", ["speech1", "speech2"])

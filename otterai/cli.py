@@ -21,14 +21,12 @@ def get_authenticated_client() -> OtterAI:
     """Get an authenticated OtterAI client."""
     username, password = load_credentials()
     if not username or not password:
-        click.echo("Not logged in. Run 'otter login' first.", err=True)
-        sys.exit(1)
+        raise click.ClickException("Not logged in. Run 'otter login' first.")
 
     client = OtterAI()
     result = client.login(username, password)
     if result["status"] != 200:
-        click.echo(f"Login failed: {result}", err=True)
-        sys.exit(1)
+        raise click.ClickException(f"Login failed: {result}")
 
     return client
 
@@ -173,8 +171,8 @@ def speeches_get(speech_id: str, as_json: bool):
     click.echo(f"Created: {speech.get('created_at', '')}")
     click.echo(f"Duration: {speech.get('duration', 0)} seconds")
 
-    # Print transcript if available
-    transcripts = data.get("transcripts", [])
+    # Print transcript if available (support both nested and top-level formats)
+    transcripts = speech.get("transcripts") or data.get("transcripts", [])
     if transcripts:
         click.echo("\nTranscript:")
         click.echo("-" * 40)
@@ -203,10 +201,28 @@ def speeches_search(query: str, speech_id: str, size: int, as_json: bool):
         click.echo(f"Search failed: {result}", err=True)
         sys.exit(1)
 
+    data = result["data"]
+
     if as_json:
-        click.echo(json.dumps(result["data"], indent=2))
+        click.echo(json.dumps(data, indent=2))
     else:
-        click.echo(json.dumps(result["data"], indent=2))
+        matches = data.get("results") or data.get("matches") or data.get("items")
+        if isinstance(matches, list) and matches:
+            for idx, match in enumerate(matches, start=1):
+                text = match.get("transcript") or match.get("text") or ""
+                start = match.get("start_time") or match.get("start") or ""
+                end = match.get("end_time") or match.get("end") or ""
+                header_parts = [f"[{idx}]"]
+                if start or end:
+                    header_parts.append(f"{start}-{end}".strip("-"))
+                click.echo(" ".join(header_parts))
+                if text:
+                    click.echo(text)
+                click.echo()
+        elif isinstance(matches, list):
+            click.echo("No results found.")
+        else:
+            click.echo(json.dumps(data, indent=2))
 
 
 @speeches.command("rename")
@@ -432,7 +448,7 @@ def speakers_tag(speech_id: str, speaker_id: str, transcript_uuid: str, tag_all:
 
     speaker_name = None
     for s in speakers_result["data"].get("speakers", []):
-        if str(s.get("id")) == str(speaker_id):
+        if str(s.get("speaker_id")) == str(speaker_id):
             speaker_name = s.get("speaker_name")
             break
 
@@ -624,10 +640,28 @@ def groups_list(as_json: bool):
         click.echo(f"Failed to get groups: {result}", err=True)
         sys.exit(1)
 
+    data = result["data"]
+
     if as_json:
-        click.echo(json.dumps(result["data"], indent=2))
+        click.echo(json.dumps(data, indent=2))
     else:
-        click.echo(json.dumps(result["data"], indent=2))
+        if isinstance(data, list):
+            if not data:
+                click.echo("No groups found.")
+            else:
+                click.echo(f"Found {len(data)} groups:")
+                for idx, group in enumerate(data, start=1):
+                    if isinstance(group, dict):
+                        name = group.get("name") or group.get("group_name") or "Unknown"
+                        group_id = group.get("id")
+                        if group_id is not None:
+                            click.echo(f"  {idx}. {name} (id: {group_id})")
+                        else:
+                            click.echo(f"  {idx}. {name}")
+                    else:
+                        click.echo(f"  {idx}. {group}")
+        else:
+            click.echo(json.dumps(data, indent=2))
 
 
 # =============================================================================

@@ -2,8 +2,6 @@
 
 import json
 import os
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -267,3 +265,115 @@ def test_speakers_list_success(runner, temp_config_dir):
     assert result.exit_code == 0
     assert "John Doe" in result.output
     assert "Jane Smith" in result.output
+
+
+def test_speakers_tag_list_segments(runner, temp_config_dir):
+    """Test speakers tag in list segments mode (no --transcript-uuid or --all)."""
+    config.save_credentials("testuser", "testpass")
+
+    mock_client = MagicMock()
+    mock_client.login.return_value = {"status": 200, "data": {}}
+    mock_client.get_speakers.return_value = {
+        "status": 200,
+        "data": {
+            "speakers": [
+                {"speaker_id": "s1", "speaker_name": "John Doe"}
+            ]
+        }
+    }
+    mock_client.get_speech.return_value = {
+        "status": 200,
+        "data": {
+            "speech": {
+                "transcripts": [
+                    {"uuid": "uuid-001", "speaker_name": "John Doe", "transcript": "Hello world segment text"},
+                    {"uuid": "uuid-002", "speaker_name": "Untagged", "transcript": "Another segment text here"}
+                ]
+            }
+        }
+    }
+
+    with patch("otterai.cli.OtterAI", return_value=mock_client):
+        result = runner.invoke(main, ["speakers", "tag", "speech123", "s1"])
+
+    assert result.exit_code == 0
+    assert "uuid-001" in result.output
+    assert "uuid-002" in result.output
+    assert "Available transcript segments" in result.output
+
+
+# =============================================================================
+# Folders Command Tests (with mocked API)
+# =============================================================================
+
+
+def test_folders_list_success(runner, temp_config_dir):
+    """Test successful folders list."""
+    config.save_credentials("testuser", "testpass")
+
+    mock_client = MagicMock()
+    mock_client.login.return_value = {"status": 200, "data": {}}
+    mock_client.get_folders.return_value = {
+        "status": 200,
+        "data": {
+            "folders": [
+                {"id": "f1", "folder_name": "Work", "speech_count": 5},
+                {"id": "f2", "folder_name": "Personal", "speech_count": 3}
+            ]
+        }
+    }
+
+    with patch("otterai.cli.OtterAI", return_value=mock_client):
+        result = runner.invoke(main, ["folders", "list"])
+
+    assert result.exit_code == 0
+    assert "Work" in result.output
+    assert "Personal" in result.output
+
+
+def test_folders_create_success(runner, temp_config_dir):
+    """Test successful folder creation."""
+    config.save_credentials("testuser", "testpass")
+
+    mock_client = MagicMock()
+    mock_client.login.return_value = {"status": 200, "data": {}}
+    mock_client.create_folder.return_value = {
+        "status": 200,
+        "data": {
+            "folder": {"id": "f_new", "folder_name": "New Folder"}
+        }
+    }
+
+    with patch("otterai.cli.OtterAI", return_value=mock_client):
+        result = runner.invoke(main, ["folders", "create", "New Folder"])
+
+    assert result.exit_code == 0
+    assert "Created folder" in result.output
+    assert "New Folder" in result.output
+
+
+# =============================================================================
+# Groups Command Tests (with mocked API)
+# =============================================================================
+
+
+def test_groups_list_success(runner, temp_config_dir):
+    """Test successful groups list."""
+    config.save_credentials("testuser", "testpass")
+
+    mock_client = MagicMock()
+    mock_client.login.return_value = {"status": 200, "data": {}}
+    mock_client.list_groups.return_value = {
+        "status": 200,
+        "data": [
+            {"id": "g1", "name": "Engineering"},
+            {"id": "g2", "name": "Marketing"}
+        ]
+    }
+
+    with patch("otterai.cli.OtterAI", return_value=mock_client):
+        result = runner.invoke(main, ["groups", "list"])
+
+    assert result.exit_code == 0
+    assert "Engineering" in result.output
+    assert "Marketing" in result.output

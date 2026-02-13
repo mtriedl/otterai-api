@@ -313,13 +313,14 @@ class OtterAI:
         if self._is_userid_invalid():
             raise OtterAIException("userid is invalid")
 
+        payload = {"userid": self._userid}
         data = {"folder_name": folder_name}
         headers = {
-            "x-csrftoken": self._cookies["csrftoken"],
+            "x-csrftoken": self._cookies.get("csrftoken", ""),
             "referer": "https://otter.ai/",
         }
         response = self._session.post(
-            create_folder_url, headers=headers, data=data
+            create_folder_url, params=payload, headers=headers, data=data
         )
 
         return self._handle_response(response)
@@ -341,7 +342,7 @@ class OtterAI:
         payload = {"userid": self._userid, "folder_id": folder_id}
         data = {"new_name": new_name}
         headers = {
-            "x-csrftoken": self._cookies["csrftoken"],
+            "x-csrftoken": self._cookies.get("csrftoken", ""),
             "referer": "https://otter.ai/",
         }
         response = self._session.post(
@@ -371,7 +372,7 @@ class OtterAI:
         payload = {"userid": self._userid, "folder_id": folder_id}
         data = {"speech_otid_list": speech_ids}
         headers = {
-            "x-csrftoken": self._cookies["csrftoken"],
+            "x-csrftoken": self._cookies.get("csrftoken", ""),
             "referer": "https://otter.ai/",
         }
         response = self._session.post(

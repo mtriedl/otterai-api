@@ -48,7 +48,7 @@ def load_credentials() -> tuple[Optional[str], Optional[str]]:
         try:
             config = json.loads(CONFIG_FILE.read_text())
             return config.get("username"), config.get("password")
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, AttributeError, TypeError):
             return None, None
 
     return None, None
