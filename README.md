@@ -60,6 +60,14 @@ export OTTERAI_USERNAME="your-email@example.com"
 export OTTERAI_PASSWORD="your-password"
 ```
 
+### Important: Speech IDs (otid vs speech_id)
+
+Otter.ai speeches have two identifiers:
+- **`speech_id`** (e.g. `22WB27HAEBEJYFCA`) — internal ID, does **NOT** work with API endpoints
+- **`otid`** (e.g. `jqb7OHo6mrHtCuMkyLN0nUS8mxY`) — the ID used in all API calls
+
+All CLI commands that accept a `SPEECH_ID` argument expect the **otid** value. Use `otter speeches list` to find otids, or `otter speeches list --json | jq '.speeches[].otid'` for just the IDs.
+
 ### Speeches
 
 ```bash
@@ -68,6 +76,12 @@ otter speeches list
 
 # List with options
 otter speeches list --page-size 10 --source owned
+
+# List speeches from the last N days
+otter speeches list --days 2
+
+# List speeches in a specific folder (by name or ID)
+otter speeches list --folder "CoverNode"
 
 # Get a specific speech
 otter speeches get SPEECH_ID
@@ -86,6 +100,13 @@ otter speeches trash SPEECH_ID
 
 # Rename a speech
 otter speeches rename SPEECH_ID "New Title"
+
+# Move speeches to a folder (by name or ID)
+otter speeches move SPEECH_ID --folder "CoverNode"
+otter speeches move ID1 ID2 ID3 --folder "CoverNode"
+
+# Move to a new folder (auto-create if it doesn't exist)
+otter speeches move SPEECH_ID --folder "New Folder" --create
 ```
 
 ### Speakers
@@ -103,6 +124,12 @@ otter speakers create "Speaker Name"
 ```bash
 # List folders
 otter folders list
+
+# Create a folder
+otter folders create "My Folder"
+
+# Rename a folder
+otter folders rename FOLDER_ID "New Name"
 
 # List groups
 otter groups list
