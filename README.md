@@ -43,7 +43,7 @@ A command-line interface is also available for interacting with Otter.ai.
 ### Authentication
 
 ```bash
-# Login (saves credentials to ~/.otterai/config.json)
+# Login (saves username to ~/.otterai/config.json and password to OS keychain when available)
 otter login
 
 # Logout (clears saved credentials)
@@ -53,11 +53,24 @@ otter logout
 otter user
 ```
 
-You can also set credentials via environment variables (these take precedence over the config file):
+You can also set credentials via environment variables (these take precedence over saved credentials):
 
 ```bash
 export OTTERAI_USERNAME="your-email@example.com"
 export OTTERAI_PASSWORD="your-password"
+```
+
+Credential storage details:
+- Preferred: password is stored in your OS keychain via `keyring`, and only username is stored in `~/.otterai/config.json`.
+- Fallback: if keyring is unavailable, password is stored in `~/.otterai/config.json` with file mode `600`.
+- Legacy configs with plaintext password are migrated to keychain on load when keyring is available.
+
+### Request timeout
+
+All API requests use a configurable timeout (default: `30` seconds):
+
+```bash
+export OTTERAI_REQUEST_TIMEOUT="30"
 ```
 
 ### Important: Speech IDs (otid vs speech_id)
@@ -91,6 +104,9 @@ otter speeches search "search query" SPEECH_ID
 
 # Download a speech (formats: txt, pdf, mp3, docx, srt)
 otter speeches download SPEECH_ID --format txt
+
+# Download with custom output name (path components are stripped for safety)
+otter speeches download SPEECH_ID --output meeting-notes
 
 # Upload an audio file
 otter speeches upload recording.mp4
