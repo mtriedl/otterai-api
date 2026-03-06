@@ -1,9 +1,11 @@
 import json
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import requests
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 
+from .config import get_request_timeout
 from .exceptions import OtterAIException
 
 
@@ -15,6 +17,7 @@ class OtterAI:
         self._session = requests.Session()
         self._userid = None
         self._cookies = None
+        self._timeout = get_request_timeout()
 
     def _is_userid_invalid(self):
         if not self._userid:
@@ -29,6 +32,14 @@ class OtterAI:
         except ValueError:
             return {"status": response.status_code, "data": {}}
 
+    def _get(self, url, **kwargs):
+        kwargs.setdefault("timeout", self._timeout)
+        return self._session.get(url, **kwargs)
+
+    def _post(self, url, **kwargs):
+        kwargs.setdefault("timeout", self._timeout)
+        return self._session.post(url, **kwargs)
+
     def login(self, username, password):
         auth_url = OtterAI.API_BASE_URL + "login"
 
@@ -36,7 +47,7 @@ class OtterAI:
 
         self._session.auth = (username, password)
 
-        response = self._session.get(auth_url, params=payload)
+        response = self._get(auth_url, params=payload)
 
         if response.status_code != requests.codes.ok:
             return self._handle_response(response)
@@ -49,7 +60,7 @@ class OtterAI:
     def get_user(self):
         user_url = OtterAI.API_BASE_URL + "user"
 
-        response = self._session.get(user_url)
+        response = self._get(user_url)
 
         return self._handle_response(response)
 
@@ -60,7 +71,7 @@ class OtterAI:
 
         payload = {"userid": self._userid}
 
-        response = self._session.get(speakers_url, params=payload)
+        response = self._get(speakers_url, params=payload)
 
         return self._handle_response(response)
 
@@ -76,7 +87,7 @@ class OtterAI:
             "source": source,
         }
 
-        response = self._session.get(speeches_url, params=payload)
+        response = self._get(speeches_url, params=payload)
 
         return self._handle_response(response)
 
@@ -87,7 +98,23 @@ class OtterAI:
 
         payload = {"userid": self._userid, "otid": speech_id}
 
-        response = self._session.get(speech_url, params=payload)
+        response = self._get(speech_url, params=payload)
+
+        return self._handle_response(response)
+
+    def set_speech_title(self, speech_id, title):
+        set_title_url = OtterAI.API_BASE_URL + "set_speech_title"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        payload = {"otid": speech_id, "title": title, "userid": self._userid}
+
+        headers = {
+            "x-csrftoken": self._cookies.get("csrftoken", "") if self._cookies else "",
+            "referer": "https://otter.ai/",
+        }
+
+        response = self._get(set_title_url, params=payload, headers=headers)
 
         return self._handle_response(response)
 
@@ -96,7 +123,7 @@ class OtterAI:
 
         payload = {"query": query, "size": size, "otid": speech_id}
 
-        response = self._session.get(query_speech_url, params=payload)
+        response = self._get(query_speech_url, params=payload)
 
         return self._handle_response(response)
 
@@ -109,7 +136,7 @@ class OtterAI:
             raise OtterAIException("userid is invalid")
 
         payload = {"userid": self._userid}
-        response = self._session.get(speech_upload_params_url, params=payload)
+        response = self._get(speech_upload_params_url, params=payload)
 
         if response.status_code != requests.codes.ok:
             return self._handle_response(response)
@@ -124,7 +151,7 @@ class OtterAI:
         prep_req.headers["Referer"] = "https://otter.ai/"
         prep_req.headers["Access-Control-Request-Method"] = "POST"
 
-        response = self._session.send(prep_req)
+        response = self._session.send(prep_req, timeout=self._timeout)
 
         if response.status_code != requests.codes.ok:
             return self._handle_response(response)
@@ -141,6 +168,7 @@ class OtterAI:
             speech_upload_prod_url,
             data=multipart_data,
             headers={"Content-Type": multipart_data.content_type},
+            timeout=self._timeout,
         )
 
         if response.status_code != 201:
@@ -160,7 +188,7 @@ class OtterAI:
             "country": "us",
             "userid": self._userid,
         }
-        response = self._session.get(finish_speech_upload, params=payload)
+        response = self._get(finish_speech_upload, params=payload)
 
         return self._handle_response(response)
 
@@ -169,6 +197,11 @@ class OtterAI:
         if self._is_userid_invalid():
             raise OtterAIException("userid is invalid")
 
+        base_name = str(name if name is not None else speech_id)
+        safe_base_name = Path(base_name).name
+        if safe_base_name in {"", ".", ".."}:
+            raise OtterAIException("invalid output filename")
+
         payload = {"userid": self._userid}
 
         data = {"formats": fileformat, "speech_otid_list": [speech_id]}
@@ -176,15 +209,11 @@ class OtterAI:
             "x-csrftoken": self._cookies["csrftoken"],
             "referer": "https://otter.ai/",
         }
-        response = self._session.post(
+        response = self._post(
             download_speech_url, params=payload, headers=headers, data=data
         )
 
-        filename = (
-            (name if not name == None else speech_id)
-            + "."
-            + ("zip" if "," in fileformat else fileformat)
-        )
+        filename = safe_base_name + "." + ("zip" if "," in fileformat else fileformat)
         if response.ok:
             with open(filename, "wb") as f:
                 f.write(response.content)
@@ -202,8 +231,11 @@ class OtterAI:
         payload = {"userid": self._userid}
 
         data = {"otid": speech_id}
-        headers = {"x-csrftoken": self._cookies["csrftoken"]}
-        response = self._session.post(
+        headers = {
+            "x-csrftoken": self._cookies["csrftoken"],
+            "referer": "https://otter.ai/",
+        }
+        response = self._post(
             move_to_trash_bin_url, params=payload, headers=headers, data=data
         )
 
@@ -217,16 +249,55 @@ class OtterAI:
         payload = {"userid": self._userid}
 
         data = {"speaker_name": speaker_name}
-        headers = {"x-csrftoken": self._cookies["csrftoken"]}
-        response = self._session.post(
+        headers = {
+            "x-csrftoken": self._cookies.get("csrftoken", ""),
+            "referer": "https://otter.ai/",
+        }
+        response = self._post(
             create_speaker_url, params=payload, headers=headers, data=data
         )
 
         return self._handle_response(response)
 
+    def set_transcript_speaker(
+        self, speech_id, transcript_uuid, speaker_id, speaker_name, create_speaker=False
+    ):
+        """Tag a speaker on a specific transcript segment.
+
+        Args:
+            speech_id: The speech/conversation otid
+            transcript_uuid: UUID of the specific transcript segment
+            speaker_id: ID of existing speaker (from get_speakers)
+            speaker_name: Name of the speaker
+            create_speaker: If True, create new speaker if not exists
+
+        Returns:
+            Response dict with status and data
+        """
+        set_speaker_url = OtterAI.API_BASE_URL + "set_transcript_speaker"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        payload = {
+            "speech_otid": speech_id,
+            "transcript_uuid": transcript_uuid,
+            "speaker_name": speaker_name,
+            "userid": self._userid,
+            "create_speaker": str(create_speaker).lower(),
+            "speaker_id": speaker_id,
+        }
+
+        headers = {
+            "referer": "https://otter.ai/",
+            "x-csrftoken": self._cookies.get("csrftoken", ""),
+        }
+        response = self._get(set_speaker_url, params=payload, headers=headers)
+
+        return self._handle_response(response)
+
     def get_notification_settings(self):
         notification_settings_url = OtterAI.API_BASE_URL + "get_notification_settings"
-        response = self._session.get(notification_settings_url)
+        response = self._get(notification_settings_url)
 
         return self._handle_response(response)
 
@@ -237,7 +308,7 @@ class OtterAI:
 
         payload = {"userid": self._userid}
 
-        response = self._session.get(list_groups_url, params=payload)
+        response = self._get(list_groups_url, params=payload)
 
         return self._handle_response(response)
 
@@ -248,7 +319,88 @@ class OtterAI:
 
         payload = {"userid": self._userid}
 
-        response = self._session.get(folders_url, params=payload)
+        response = self._get(folders_url, params=payload)
+
+        return self._handle_response(response)
+
+    def create_folder(self, folder_name):
+        """Create a new folder.
+
+        Args:
+            folder_name: Name for the new folder
+
+        Returns:
+            Response dict with status and data including new folder ID
+        """
+        create_folder_url = OtterAI.API_BASE_URL + "create_folder"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        payload = {"userid": self._userid}
+        data = {"folder_name": folder_name}
+        headers = {
+            "x-csrftoken": self._cookies.get("csrftoken", ""),
+            "referer": "https://otter.ai/",
+        }
+        response = self._post(
+            create_folder_url, params=payload, headers=headers, data=data
+        )
+
+        return self._handle_response(response)
+
+    def rename_folder(self, folder_id, new_name):
+        """Rename an existing folder.
+
+        Args:
+            folder_id: ID of the folder to rename
+            new_name: New name for the folder
+
+        Returns:
+            Response dict with status and data
+        """
+        rename_folder_url = OtterAI.API_BASE_URL + "rename_folder"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        payload = {"userid": self._userid, "folder_id": folder_id}
+        data = {"new_name": new_name}
+        headers = {
+            "x-csrftoken": self._cookies.get("csrftoken", ""),
+            "referer": "https://otter.ai/",
+        }
+        response = self._post(
+            rename_folder_url, params=payload, headers=headers, data=data
+        )
+
+        return self._handle_response(response)
+
+    def add_folder_speeches(self, folder_id, speech_ids):
+        """Move speeches to a folder.
+
+        Args:
+            folder_id: ID of the destination folder
+            speech_ids: Single speech ID string or list of speech IDs
+
+        Returns:
+            Response dict with status and data
+        """
+        add_folder_speeches_url = OtterAI.API_BASE_URL + "add_folder_speeches"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        # Handle both single ID and list
+        if isinstance(speech_ids, str):
+            speech_ids = [speech_ids]
+
+        payload = {"userid": self._userid, "folder_id": folder_id}
+        data = {"speech_otid_list": speech_ids}
+        headers = {
+            "x-csrftoken": self._cookies.get("csrftoken", ""),
+            "referer": "https://otter.ai/",
+        }
+        response = self._post(
+            add_folder_speeches_url, params=payload, headers=headers, data=data
+        )
 
         return self._handle_response(response)
 
