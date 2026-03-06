@@ -18,11 +18,17 @@ Use `otter speeches list` or `otter speeches list --json` to find otids.
 import json
 import sys
 import time
+import warnings
 from datetime import datetime, timedelta, timezone
 
 import click
 
-from .config import clear_credentials, get_config_path, load_credentials, save_credentials
+from .config import (
+    clear_credentials,
+    get_config_path,
+    load_credentials,
+    save_credentials,
+)
 from .otterai import OtterAI, OtterAIException
 
 
@@ -32,6 +38,7 @@ def _format_timestamp(epoch: int, fmt: str = "%a %b %d, %Y @ %I:%M%p ET") -> str
         return ""
     try:
         from zoneinfo import ZoneInfo
+
         dt = datetime.fromtimestamp(epoch, tz=ZoneInfo("America/New_York"))
     except ImportError:
         # Python < 3.9 fallback: assume UTC-5
@@ -93,7 +100,7 @@ def get_authenticated_client() -> OtterAI:
 @click.version_option(version="0.1.0", prog_name="otter")
 def main():
     """OtterAI CLI - Interact with Otter.ai from the command line."""
-    pass
+    warnings.filterwarnings("ignore", message=".*urllib3.*OpenSSL.*")
 
 
 # =============================================================================
@@ -164,7 +171,13 @@ def speeches():
     type=click.Choice(["owned", "shared", "all"]),
     help="Source filter (default: owned)",
 )
-@click.option("--days", "-d", default=None, type=int, help="Only show speeches from the last N days")
+@click.option(
+    "--days",
+    "-d",
+    default=None,
+    type=int,
+    help="Only show speeches from the last N days",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def speeches_list(folder, page_size: int, source: str, days: int, as_json: bool):
     """List all speeches."""
@@ -178,7 +191,9 @@ def speeches_list(folder, page_size: int, source: str, days: int, as_json: bool)
         folder_id = int(folder) if folder else 0
 
     try:
-        result = client.get_speeches(folder=folder_id, page_size=page_size, source=source)
+        result = client.get_speeches(
+            folder=folder_id, page_size=page_size, source=source
+        )
     except OtterAIException as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -212,8 +227,14 @@ def speeches_list(folder, page_size: int, source: str, days: int, as_json: bool)
         duration = speech.get("duration", 0)
         live = speech.get("live_status", "")
         folder_info = speech.get("folder")
-        folder_name = folder_info.get("folder_name", "") if isinstance(folder_info, dict) else ""
-        speakers = [sp.get("speaker_name", "") for sp in speech.get("speakers", []) if sp.get("speaker_name")]
+        folder_name = (
+            folder_info.get("folder_name", "") if isinstance(folder_info, dict) else ""
+        )
+        speakers = [
+            sp.get("speaker_name", "")
+            for sp in speech.get("speakers", [])
+            if sp.get("speaker_name")
+        ]
 
         # Title line with live indicator
         live_tag = " [LIVE]" if live == "live" else ""
@@ -265,7 +286,9 @@ def speeches_get(speech_id: str, as_json: bool):
     click.echo(f"Duration: {_format_duration(duration)} ({duration}s)")
     folder_info = speech.get("folder")
     if isinstance(folder_info, dict) and folder_info.get("folder_name"):
-        click.echo(f"Folder: {folder_info['folder_name']} (ID: {folder_info.get('id', '')})")
+        click.echo(
+            f"Folder: {folder_info['folder_name']} (ID: {folder_info.get('id', '')})"
+        )
     speakers = speech.get("speakers", [])
     if speakers:
         names = [s.get("speaker_name", "") for s in speakers if s.get("speaker_name")]
@@ -428,7 +451,11 @@ def speeches_trash(speech_id: str, yes: bool):
 @speeches.command("move")
 @click.argument("speech_ids", nargs=-1, required=True)
 @click.option("--folder", "-f", required=True, help="Destination folder ID or name")
-@click.option("--create", is_flag=True, help="Create the folder if it doesn't exist (when using folder name)")
+@click.option(
+    "--create",
+    is_flag=True,
+    help="Create the folder if it doesn't exist (when using folder name)",
+)
 def speeches_move(speech_ids: tuple, folder: str, create: bool):
     """Move speech(es) to a folder.
 
@@ -546,12 +573,16 @@ def speakers_create(name: str):
 @speakers.command("tag")
 @click.argument("speech_id")
 @click.argument("speaker_id")
-@click.option("--transcript-uuid", "-t", default=None,
-              help="Specific transcript UUID to tag")
-@click.option("--all", "-a", "tag_all", is_flag=True,
-              help="Tag all segments with this speaker")
+@click.option(
+    "--transcript-uuid", "-t", default=None, help="Specific transcript UUID to tag"
+)
+@click.option(
+    "--all", "-a", "tag_all", is_flag=True, help="Tag all segments with this speaker"
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def speakers_tag(speech_id: str, speaker_id: str, transcript_uuid: str, tag_all: bool, as_json: bool):
+def speakers_tag(
+    speech_id: str, speaker_id: str, transcript_uuid: str, tag_all: bool, as_json: bool
+):
     """Tag a speaker on transcript segment(s).
 
     If no --transcript-uuid or --all is provided, lists available segments.
@@ -602,12 +633,14 @@ def speakers_tag(speech_id: str, speaker_id: str, transcript_uuid: str, tag_all:
         if as_json:
             segments = []
             for t in transcripts:
-                segments.append({
-                    "uuid": t.get("uuid", ""),
-                    "speaker_id": t.get("speaker_id"),
-                    "speaker_name": t.get("speaker_name", "Untagged"),
-                    "text_preview": t.get("transcript", "")[:80]
-                })
+                segments.append(
+                    {
+                        "uuid": t.get("uuid", ""),
+                        "speaker_id": t.get("speaker_id"),
+                        "speaker_name": t.get("speaker_name", "Untagged"),
+                        "text_preview": t.get("transcript", "")[:80],
+                    }
+                )
             click.echo(json.dumps(segments, indent=2))
         else:
             click.echo(f"Available transcript segments in {speech_id}:\n")
@@ -637,7 +670,7 @@ def speakers_tag(speech_id: str, speaker_id: str, transcript_uuid: str, tag_all:
                 transcript_uuid=uuid,
                 speaker_id=speaker_id,
                 speaker_name=speaker_name,
-                create_speaker=False
+                create_speaker=False,
             )
             if result["status"] == 200:
                 tagged_count += 1
@@ -649,7 +682,9 @@ def speakers_tag(speech_id: str, speaker_id: str, transcript_uuid: str, tag_all:
             click.echo(f"Error tagging {uuid}: {e}", err=True)
 
     if tag_all:
-        click.echo(f"Tagged {tagged_count}/{len(segments_to_tag)} segments as '{speaker_name}'")
+        click.echo(
+            f"Tagged {tagged_count}/{len(segments_to_tag)} segments as '{speaker_name}'"
+        )
 
 
 # =============================================================================

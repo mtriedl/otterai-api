@@ -1,4 +1,6 @@
 import os
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 from dotenv import load_dotenv
@@ -134,6 +136,89 @@ def test_set_speech_title_invalid_userid():
     otter = OtterAI()
     with pytest.raises(OtterAIException, match="userid is invalid"):
         otter.set_speech_title("dummyid", "New Title")
+
+
+def test_set_speech_title_includes_userid_and_auth_headers():
+    otter = OtterAI()
+    otter._userid = "user123"
+    otter._cookies = {"csrftoken": "csrf-token"}
+
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = {}
+    otter._session = MagicMock()
+    otter._session.get.return_value = response
+
+    otter.set_speech_title("speech123", "New Title")
+
+    otter._session.get.assert_called_once_with(
+        OtterAI.API_BASE_URL + "set_speech_title",
+        params={"otid": "speech123", "title": "New Title", "userid": "user123"},
+        headers={"x-csrftoken": "csrf-token", "referer": "https://otter.ai/"},
+        timeout=otter._timeout,
+    )
+
+
+def test_otterai_uses_timeout_from_config():
+    with patch("otterai.otterai.get_request_timeout", return_value=9.5):
+        otter = OtterAI()
+    assert otter._timeout == 9.5
+
+
+def test_login_uses_timeout():
+    otter = OtterAI()
+    otter._timeout = 11.0
+
+    response = MagicMock()
+    response.status_code = 401
+    response.json.return_value = {}
+    otter._session = MagicMock()
+    otter._session.get.return_value = response
+
+    otter.login("test@example.com", "pass")
+
+    otter._session.get.assert_called_once_with(
+        OtterAI.API_BASE_URL + "login",
+        params={"username": "test@example.com"},
+        timeout=11.0,
+    )
+
+
+def test_download_speech_sanitizes_filename_and_uses_timeout(tmp_path, monkeypatch):
+    otter = OtterAI()
+    otter._userid = "user123"
+    otter._cookies = {"csrftoken": "csrf-token"}
+    otter._timeout = 17.0
+
+    response = MagicMock()
+    response.status_code = 200
+    response.ok = True
+    response.content = b"dummy-bytes"
+    otter._session = MagicMock()
+    otter._session.post.return_value = response
+
+    monkeypatch.chdir(tmp_path)
+    result = otter.download_speech("speech123", name="../evil", fileformat="txt")
+
+    assert result["data"]["filename"] == "evil.txt"
+    assert (tmp_path / "evil.txt").exists()
+    otter._session.post.assert_called_once_with(
+        OtterAI.API_BASE_URL + "bulk_export",
+        params={"userid": "user123"},
+        headers={"x-csrftoken": "csrf-token", "referer": "https://otter.ai/"},
+        data={"formats": "txt", "speech_otid_list": ["speech123"]},
+        timeout=17.0,
+    )
+
+
+@pytest.mark.parametrize("invalid_name", ["", ".", "..", "../"])
+def test_download_speech_rejects_invalid_output_names(invalid_name):
+    otter = OtterAI()
+    otter._userid = "user123"
+    otter._cookies = {"csrftoken": "csrf-token"}
+
+    with pytest.raises(OtterAIException, match="invalid output filename"):
+        otter.download_speech("speech123", name=invalid_name, fileformat="txt")
 
 
 def test_set_transcript_speaker_invalid_userid():

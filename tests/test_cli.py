@@ -2,6 +2,7 @@
 
 import json
 import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -87,10 +88,38 @@ def test_load_credentials_from_env(temp_config_dir):
     config.save_credentials("fileuser", "filepass")
 
     # Set env vars
-    with patch.dict(os.environ, {"OTTERAI_USERNAME": "envuser", "OTTERAI_PASSWORD": "envpass"}):
+    with patch.dict(
+        os.environ, {"OTTERAI_USERNAME": "envuser", "OTTERAI_PASSWORD": "envpass"}
+    ):
         username, password = config.load_credentials()
         assert username == "envuser"
         assert password == "envpass"
+
+
+def test_load_credentials_partial_env_username_does_not_use_other_user_file_password(
+    temp_config_dir,
+):
+    """Env username should not pair with plaintext password from a different file user."""
+    config.save_credentials("fileuser", "filepass")
+
+    with patch.dict(os.environ, {"OTTERAI_USERNAME": "envuser"}, clear=False):
+        os.environ.pop("OTTERAI_PASSWORD", None)
+        username, password = config.load_credentials()
+
+    assert username == "envuser"
+    assert password is None
+
+
+def test_load_credentials_partial_env_password_overrides_file(temp_config_dir):
+    """Test that env password overrides file while preserving file username."""
+    config.save_credentials("fileuser", "filepass")
+
+    with patch.dict(os.environ, {"OTTERAI_PASSWORD": "envpass"}, clear=False):
+        os.environ.pop("OTTERAI_USERNAME", None)
+        username, password = config.load_credentials()
+
+    assert username == "fileuser"
+    assert password == "envpass"
 
 
 def test_load_credentials_no_config(temp_config_dir):
@@ -110,6 +139,83 @@ def test_clear_credentials(temp_config_dir):
 def test_clear_credentials_no_config(temp_config_dir):
     """Test clearing credentials when no config exists."""
     assert config.clear_credentials() is False
+
+
+def test_get_request_timeout_default_and_invalid_env(temp_config_dir):
+    """Timeout helper should use default when env is missing/invalid."""
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("OTTERAI_REQUEST_TIMEOUT", None)
+        assert config.get_request_timeout() == config.DEFAULT_REQUEST_TIMEOUT
+
+    with patch.dict(os.environ, {"OTTERAI_REQUEST_TIMEOUT": "invalid"}, clear=False):
+        assert config.get_request_timeout() == config.DEFAULT_REQUEST_TIMEOUT
+
+
+def test_get_request_timeout_from_env(temp_config_dir):
+    """Timeout helper should parse positive float from env."""
+    with patch.dict(os.environ, {"OTTERAI_REQUEST_TIMEOUT": "12.5"}, clear=False):
+        assert config.get_request_timeout() == 12.5
+
+
+def test_save_credentials_uses_keyring_and_omits_password_in_file(temp_config_dir):
+    """When keyring is available, password should not be stored in config file."""
+    fake_keyring = SimpleNamespace(
+        set_password=MagicMock(),
+        get_password=MagicMock(return_value="testpass"),
+        delete_password=MagicMock(),
+    )
+
+    with patch.object(config, "keyring", fake_keyring, create=True):
+        config.save_credentials("testuser", "testpass")
+
+    payload = json.loads(config.CONFIG_FILE.read_text())
+    assert payload.get("username") == "testuser"
+    assert "password" not in payload
+    fake_keyring.set_password.assert_called_once()
+
+
+def test_load_credentials_uses_keyring_before_file_password(temp_config_dir):
+    """When keyring has password, it should be preferred over file plaintext."""
+    config.CONFIG_FILE.write_text(
+        json.dumps({"username": "testuser", "password": "legacypass"}, indent=2)
+    )
+
+    fake_keyring = SimpleNamespace(
+        set_password=MagicMock(),
+        get_password=MagicMock(return_value="secret-from-keyring"),
+        delete_password=MagicMock(),
+    )
+
+    with patch.object(config, "keyring", fake_keyring, create=True):
+        username, password = config.load_credentials()
+
+    assert username == "testuser"
+    assert password == "secret-from-keyring"
+
+
+def test_load_credentials_migrates_legacy_file_password_to_keyring(temp_config_dir):
+    """Legacy plaintext password should be migrated into keyring when available."""
+    config.CONFIG_FILE.write_text(
+        json.dumps({"username": "legacyuser", "password": "legacypass"}, indent=2)
+    )
+
+    fake_keyring = SimpleNamespace(
+        set_password=MagicMock(),
+        get_password=MagicMock(return_value=None),
+        delete_password=MagicMock(),
+    )
+
+    with patch.object(config, "keyring", fake_keyring, create=True):
+        username, password = config.load_credentials()
+
+    assert username == "legacyuser"
+    assert password == "legacypass"
+    fake_keyring.set_password.assert_called_once_with(
+        config.SERVICE_NAME, "legacyuser", "legacypass"
+    )
+    migrated = json.loads(config.CONFIG_FILE.read_text())
+    assert migrated.get("username") == "legacyuser"
+    assert "password" not in migrated
 
 
 # =============================================================================
@@ -152,7 +258,7 @@ def test_login_success(runner, temp_config_dir):
     mock_client = MagicMock()
     mock_client.login.return_value = {
         "status": 200,
-        "data": {"email": "test@example.com", "userid": "123"}
+        "data": {"email": "test@example.com", "userid": "123"},
     }
 
     with patch("otterai.cli.OtterAI", return_value=mock_client):
@@ -165,7 +271,10 @@ def test_login_success(runner, temp_config_dir):
 def test_login_failure(runner, temp_config_dir):
     """Test failed login."""
     mock_client = MagicMock()
-    mock_client.login.return_value = {"status": 401, "data": {"error": "Invalid credentials"}}
+    mock_client.login.return_value = {
+        "status": 401,
+        "data": {"error": "Invalid credentials"},
+    }
 
     with patch("otterai.cli.OtterAI", return_value=mock_client):
         result = runner.invoke(main, ["login"], input="test@example.com\nbadpass\n")
@@ -204,10 +313,14 @@ def test_speeches_list_success(runner, temp_config_dir):
         "status": 200,
         "data": {
             "speeches": [
-                {"otid": "abc123", "title": "Test Speech", "created_at": "2024-01-01"},
-                {"otid": "def456", "title": "Another Speech", "created_at": "2024-01-02"}
+                {"otid": "abc123", "title": "Test Speech", "created_at": 1704067200},
+                {
+                    "otid": "def456",
+                    "title": "Another Speech",
+                    "created_at": 1704153600,
+                },
             ]
-        }
+        },
     }
 
     with patch("otterai.cli.OtterAI", return_value=mock_client):
@@ -226,7 +339,7 @@ def test_speeches_list_json_output(runner, temp_config_dir):
     mock_client.login.return_value = {"status": 200, "data": {}}
     mock_client.get_speeches.return_value = {
         "status": 200,
-        "data": {"speeches": [{"otid": "abc123", "title": "Test"}]}
+        "data": {"speeches": [{"otid": "abc123", "title": "Test"}]},
     }
 
     with patch("otterai.cli.OtterAI", return_value=mock_client):
@@ -254,9 +367,9 @@ def test_speakers_list_success(runner, temp_config_dir):
         "data": {
             "speakers": [
                 {"speaker_id": "s1", "speaker_name": "John Doe"},
-                {"speaker_id": "s2", "speaker_name": "Jane Smith"}
+                {"speaker_id": "s2", "speaker_name": "Jane Smith"},
             ]
-        }
+        },
     }
 
     with patch("otterai.cli.OtterAI", return_value=mock_client):
@@ -275,22 +388,26 @@ def test_speakers_tag_list_segments(runner, temp_config_dir):
     mock_client.login.return_value = {"status": 200, "data": {}}
     mock_client.get_speakers.return_value = {
         "status": 200,
-        "data": {
-            "speakers": [
-                {"speaker_id": "s1", "speaker_name": "John Doe"}
-            ]
-        }
+        "data": {"speakers": [{"speaker_id": "s1", "speaker_name": "John Doe"}]},
     }
     mock_client.get_speech.return_value = {
         "status": 200,
         "data": {
             "speech": {
                 "transcripts": [
-                    {"uuid": "uuid-001", "speaker_name": "John Doe", "transcript": "Hello world segment text"},
-                    {"uuid": "uuid-002", "speaker_name": "Untagged", "transcript": "Another segment text here"}
+                    {
+                        "uuid": "uuid-001",
+                        "speaker_name": "John Doe",
+                        "transcript": "Hello world segment text",
+                    },
+                    {
+                        "uuid": "uuid-002",
+                        "speaker_name": "Untagged",
+                        "transcript": "Another segment text here",
+                    },
                 ]
             }
-        }
+        },
     }
 
     with patch("otterai.cli.OtterAI", return_value=mock_client):
@@ -318,9 +435,9 @@ def test_folders_list_success(runner, temp_config_dir):
         "data": {
             "folders": [
                 {"id": "f1", "folder_name": "Work", "speech_count": 5},
-                {"id": "f2", "folder_name": "Personal", "speech_count": 3}
+                {"id": "f2", "folder_name": "Personal", "speech_count": 3},
             ]
-        }
+        },
     }
 
     with patch("otterai.cli.OtterAI", return_value=mock_client):
@@ -339,9 +456,7 @@ def test_folders_create_success(runner, temp_config_dir):
     mock_client.login.return_value = {"status": 200, "data": {}}
     mock_client.create_folder.return_value = {
         "status": 200,
-        "data": {
-            "folder": {"id": "f_new", "folder_name": "New Folder"}
-        }
+        "data": {"folder": {"id": "f_new", "folder_name": "New Folder"}},
     }
 
     with patch("otterai.cli.OtterAI", return_value=mock_client):
@@ -367,8 +482,8 @@ def test_groups_list_success(runner, temp_config_dir):
         "status": 200,
         "data": [
             {"id": "g1", "name": "Engineering"},
-            {"id": "g2", "name": "Marketing"}
-        ]
+            {"id": "g2", "name": "Marketing"},
+        ],
     }
 
     with patch("otterai.cli.OtterAI", return_value=mock_client):
