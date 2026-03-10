@@ -15,6 +15,8 @@ load_dotenv()
 def logged_in_otter():
     username = os.getenv("OTTERAI_USERNAME")
     password = os.getenv("OTTERAI_PASSWORD")
+    if not username or not password:
+        pytest.skip("Integration credentials are not configured")
     otter = OtterAI()
     otter.login(username, password)
     return otter
@@ -42,16 +44,19 @@ def test_otterai_valid_userid():
     assert otter._is_userid_invalid() is False
 
 
+@pytest.mark.integration
 def test_login(logged_in_otter):
     assert logged_in_otter._userid is not None
 
 
+@pytest.mark.integration
 def test_get_user(logged_in_otter):
     username = os.getenv("OTTERAI_USERNAME")
     response = logged_in_otter.get_user()
     assert response["data"]["user"]["email"] == username
 
 
+@pytest.mark.integration
 def test_get_speakers(logged_in_otter):
     response = logged_in_otter.get_speakers()
     assert response["status"] == 200
@@ -63,9 +68,48 @@ def test_get_speakers_invalid_userid():
         otter.get_speakers()
 
 
+@pytest.mark.integration
 def test_get_speeches(logged_in_otter):
     response = logged_in_otter.get_speeches()
     assert response["status"] == 200
+
+
+def test_get_speeches_includes_time_filters_and_timeout():
+    otter = OtterAI()
+    otter._userid = "user123"
+    otter._timeout = 13.0
+
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = {}
+    otter._session = MagicMock()
+    otter._session.get.return_value = response
+
+    otter.get_speeches(last_load_ts="1700000000", modified_after=1700001234)
+
+    otter._session.get.assert_called_once_with(
+        OtterAI.API_BASE_URL + "speeches",
+        params={
+            "userid": "user123",
+            "folder": 0,
+            "page_size": 45,
+            "source": "owned",
+            "last_load_ts": 1700000000,
+            "modified_after": 1700001234,
+        },
+        timeout=13.0,
+    )
+
+
+@pytest.mark.parametrize("field_name", ["last_load_ts", "modified_after"])
+@pytest.mark.parametrize("invalid_value", [True, "abc", "", -1, object()])
+def test_get_speeches_rejects_invalid_time_filters(field_name, invalid_value):
+    otter = OtterAI()
+    otter._userid = "user123"
+
+    kwargs = {field_name: invalid_value}
+    with pytest.raises(OtterAIException, match=field_name):
+        otter.get_speeches(**kwargs)
 
 
 def test_get_speeches_invalid_userid():
@@ -80,6 +124,7 @@ def test_get_speech_invalid_userid():
         otter.get_speech("dummyid")
 
 
+@pytest.mark.integration
 def test_query_speech(logged_in_otter):
     # Minimal test, can be expanded
     response = logged_in_otter.query_speech("test", "dummyid")
@@ -110,6 +155,7 @@ def test_create_speaker_invalid_userid():
         otter.create_speaker("dummy_speaker")
 
 
+@pytest.mark.integration
 def test_get_notification_settings(logged_in_otter):
     response = logged_in_otter.get_notification_settings()
     assert "status" in response
@@ -243,3 +289,69 @@ def test_add_folder_speeches_invalid_userid():
     otter = OtterAI()
     with pytest.raises(OtterAIException, match="userid is invalid"):
         otter.add_folder_speeches("folder123", ["speech1", "speech2"])
+
+
+def test_list_folder_speeches_invalid_userid():
+    otter = OtterAI()
+    with pytest.raises(OtterAIException, match="userid is invalid"):
+        otter.list_folder_speeches("folder123")
+
+
+def test_list_folder_speeches_includes_optional_params_and_timeout():
+    otter = OtterAI()
+    otter._userid = "user123"
+    otter._timeout = 7.5
+
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = {"speeches": []}
+    otter._session = MagicMock()
+    otter._session.get.return_value = response
+
+    otter.list_folder_speeches(
+        folder_id=12,
+        page_size=5,
+        last_load_speech_id="otid_last",
+        speech_metadata=False,
+    )
+
+    otter._session.get.assert_called_once_with(
+        OtterAI.API_BASE_URL + "list_folder_speeches",
+        params={
+            "userid": "user123",
+            "folder_id": 12,
+            "page_size": 5,
+            "speech_metadata": "false",
+            "last_load_speech_id": "otid_last",
+        },
+        timeout=7.5,
+    )
+
+
+def test_list_folder_speeches_rejects_invalid_inputs():
+    otter = OtterAI()
+    otter._userid = "user123"
+
+    with pytest.raises(OtterAIException, match="folder_id"):
+        otter.list_folder_speeches("")
+    with pytest.raises(OtterAIException, match="page_size"):
+        otter.list_folder_speeches("folder123", page_size=0)
+    with pytest.raises(OtterAIException, match="speech_metadata"):
+        otter.list_folder_speeches("folder123", speech_metadata="yes")
+    with pytest.raises(OtterAIException, match="last_load_speech_id"):
+        otter.list_folder_speeches("folder123", last_load_speech_id=" ")
+
+
+@pytest.mark.integration
+def test_list_folder_speeches_integration(logged_in_otter):
+    folders_response = logged_in_otter.get_folders()
+    if folders_response["status"] != 200:
+        pytest.skip("Unable to list folders for integration test")
+
+    folders = folders_response.get("data", {}).get("folders", [])
+    if not folders:
+        pytest.skip("No folders available for integration test")
+
+    folder_id = folders[0].get("id")
+    response = logged_in_otter.list_folder_speeches(folder_id=folder_id, page_size=5)
+    assert response["status"] == 200

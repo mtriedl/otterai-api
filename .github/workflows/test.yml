@@ -11,6 +11,11 @@ on:
 jobs:
     test:
         runs-on: ubuntu-latest
+        env:
+            OTTERAI_USERNAME: ${{ secrets.OTTERAI_USERNAME }}
+            OTTERAI_PASSWORD: ${{ secrets.OTTERAI_PASSWORD }}
+            TEST_OTTERAI_SPEECH_OTID: ${{ secrets.TEST_OTTERAI_SPEECH_OTID }}
+
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -21,5 +26,9 @@ jobs:
             - name: Install dependencies
               run: make init-dev
 
-            - name: Run tests
-              run: make test
+            - name: Run non-integration tests
+              run: make test-no-integration
+
+            - name: Run integration tests
+              if: ${{ env.OTTERAI_USERNAME != '' && env.OTTERAI_PASSWORD != '' }}
+              run: make test-integration

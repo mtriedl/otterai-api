@@ -190,9 +190,16 @@ def speeches_list(folder, page_size: int, source: str, days: int, as_json: bool)
     else:
         folder_id = int(folder) if folder else 0
 
+    modified_after = None
+    if days is not None:
+        modified_after = max(0, int(time.time() - (days * 86400)))
+
     try:
         result = client.get_speeches(
-            folder=folder_id, page_size=page_size, source=source
+            folder=folder_id,
+            page_size=page_size,
+            source=source,
+            modified_after=modified_after,
         )
     except OtterAIException as e:
         click.echo(f"Error: {e}", err=True)
@@ -205,7 +212,7 @@ def speeches_list(folder, page_size: int, source: str, days: int, as_json: bool)
     data = result["data"]
     speeches_data = data.get("speeches", [])
 
-    # Filter by days if specified
+    # Keep client-side filtering as a fallback in case the API ignores modified_after.
     if days is not None and speeches_data:
         cutoff = time.time() - (days * 86400)
         speeches_data = [s for s in speeches_data if s.get("created_at", 0) >= cutoff]

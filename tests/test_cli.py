@@ -351,6 +351,39 @@ def test_speeches_list_json_output(runner, temp_config_dir):
     assert "speeches" in data
 
 
+def test_speeches_list_days_uses_server_filter_and_local_fallback(
+    runner, temp_config_dir
+):
+    """The CLI should send modified_after and still filter locally by created_at."""
+    config.save_credentials("testuser", "testpass")
+
+    mock_client = MagicMock()
+    mock_client.login.return_value = {"status": 200, "data": {}}
+    mock_client.get_speeches.return_value = {
+        "status": 200,
+        "data": {
+            "speeches": [
+                {"otid": "recent1", "title": "Recent Speech", "created_at": 200000},
+                {"otid": "old1", "title": "Old Speech", "created_at": 100},
+            ]
+        },
+    }
+
+    with patch("otterai.cli.OtterAI", return_value=mock_client):
+        with patch("otterai.cli.time.time", return_value=200000):
+            result = runner.invoke(main, ["speeches", "list", "--days", "1"])
+
+    assert result.exit_code == 0
+    assert "Recent Speech" in result.output
+    assert "Old Speech" not in result.output
+    mock_client.get_speeches.assert_called_once_with(
+        folder=0,
+        page_size=45,
+        source="owned",
+        modified_after=113600,
+    )
+
+
 # =============================================================================
 # Speakers Command Tests (with mocked API)
 # =============================================================================

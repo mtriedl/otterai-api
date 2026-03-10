@@ -17,3 +17,8 @@ otter = "otterai.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "black"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that require live Otter.ai credentials",
+]

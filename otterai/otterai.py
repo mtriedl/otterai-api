@@ -40,6 +40,30 @@ class OtterAI:
         kwargs.setdefault("timeout", self._timeout)
         return self._session.post(url, **kwargs)
 
+    def _coerce_unix_timestamp(self, value, field_name):
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            raise OtterAIException(f"{field_name} must be a unix timestamp")
+
+        parsed_value = value
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                raise OtterAIException(f"{field_name} must be a unix timestamp")
+            try:
+                parsed_value = float(stripped) if "." in stripped else int(stripped)
+            except ValueError as exc:
+                raise OtterAIException(
+                    f"{field_name} must be a unix timestamp"
+                ) from exc
+
+        if not isinstance(parsed_value, (int, float)):
+            raise OtterAIException(f"{field_name} must be a unix timestamp")
+        if parsed_value < 0:
+            raise OtterAIException(f"{field_name} must be >= 0")
+        return int(parsed_value)
+
     def login(self, username, password):
         auth_url = OtterAI.API_BASE_URL + "login"
 
@@ -75,10 +99,22 @@ class OtterAI:
 
         return self._handle_response(response)
 
-    def get_speeches(self, folder=0, page_size=45, source="owned"):
+    def get_speeches(
+        self,
+        folder=0,
+        page_size=45,
+        source="owned",
+        last_load_ts=None,
+        modified_after=None,
+    ):
         speeches_url = OtterAI.API_BASE_URL + "speeches"
         if self._is_userid_invalid():
             raise OtterAIException("userid is invalid")
+
+        coerced_last_load_ts = self._coerce_unix_timestamp(last_load_ts, "last_load_ts")
+        coerced_modified_after = self._coerce_unix_timestamp(
+            modified_after, "modified_after"
+        )
 
         payload = {
             "userid": self._userid,
@@ -86,6 +122,10 @@ class OtterAI:
             "page_size": page_size,
             "source": source,
         }
+        if coerced_last_load_ts is not None:
+            payload["last_load_ts"] = coerced_last_load_ts
+        if coerced_modified_after is not None:
+            payload["modified_after"] = coerced_modified_after
 
         response = self._get(speeches_url, params=payload)
 
@@ -404,8 +444,55 @@ class OtterAI:
 
         return self._handle_response(response)
 
+    def list_folder_speeches(
+        self, folder_id, page_size=12, last_load_speech_id=None, speech_metadata=True
+    ):
+        """Fetch speeches from a single folder with optional pagination."""
+        list_folder_speeches_url = OtterAI.API_BASE_URL + "list_folder_speeches"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        if isinstance(folder_id, bool) or folder_id is None:
+            raise OtterAIException("folder_id must be a non-empty string or int")
+        if isinstance(folder_id, str):
+            folder_id = folder_id.strip()
+            if not folder_id:
+                raise OtterAIException("folder_id must be a non-empty string or int")
+        elif isinstance(folder_id, int):
+            if folder_id < 0:
+                raise OtterAIException("folder_id must be >= 0")
+        else:
+            raise OtterAIException("folder_id must be a non-empty string or int")
+
+        if (
+            isinstance(page_size, bool)
+            or not isinstance(page_size, int)
+            or page_size < 1
+        ):
+            raise OtterAIException("page_size must be an integer >= 1")
+
+        if not isinstance(speech_metadata, bool):
+            raise OtterAIException("speech_metadata must be a bool")
+
+        payload = {
+            "userid": self._userid,
+            "folder_id": folder_id,
+            "page_size": page_size,
+            "speech_metadata": str(speech_metadata).lower(),
+        }
+        if last_load_speech_id is not None:
+            if (
+                not isinstance(last_load_speech_id, str)
+                or not last_load_speech_id.strip()
+            ):
+                raise OtterAIException("last_load_speech_id must be a non-empty string")
+            payload["last_load_speech_id"] = last_load_speech_id.strip()
+
+        response = self._get(list_folder_speeches_url, params=payload)
+        return self._handle_response(response)
+
     def speech_start(self):
-        speech_start_uel = OtterAI.API_BASE_URL + "speech_start"
+        speech_start_url = OtterAI.API_BASE_URL + "speech_start"
         ### TODO
         # In the browser a websocket session is opened
         # wss://ws.aisense.com/api/v2/client/speech?token=ey...

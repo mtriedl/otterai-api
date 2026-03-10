@@ -184,10 +184,16 @@ otter.get_user()
 
 Get all speeches
 
-**optional parameters**: folder, page_size, source
+**optional parameters**: folder, page_size, source, last_load_ts, modified_after
 
 ```python
 otter.get_speeches()
+```
+
+Use `last_load_ts` or `modified_after` (Unix timestamps) for incremental fetches:
+
+```python
+otter.get_speeches(modified_after=1735689600)
 ```
 
 Get speech by id
@@ -253,6 +259,14 @@ Get all folders
 ```python
 otter.get_folders()
 ```
+
+List speeches from a specific folder with pagination:
+
+```python
+otter.list_folder_speeches(folder_id, page_size=12, last_load_speech_id=None, speech_metadata=True)
+```
+
+Use this when you need folder-scoped pagination; use `get_speeches(folder=...)` for broad listing.
 
 ### Groups
 
