@@ -7,3 +7,4 @@ lcov.info
 .coverage
 .env
 tests/output/
+.worktrees/
