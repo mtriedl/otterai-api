@@ -46,11 +46,33 @@ function parseRelativeDays(value: string): number | null {
   return Number(trimmedValue)
 }
 
-function parseBackfillValue(mode: BackfillMode, value: string): number | string | null {
-  return mode === 'relativeDays' ? parseRelativeDays(value) : value
+function isValidAbsoluteDate(value: string): boolean {
+  const trimmedValue = value.trim()
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedValue)) {
+    return false
+  }
+
+  const [year, month, day] = trimmedValue.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  )
 }
 
-function resolveBackfillValue(mode: BackfillMode, value: string, fallback: number): number | string {
+function parseAbsoluteDate(value: string): string | null {
+  const trimmedValue = value.trim()
+  return isValidAbsoluteDate(trimmedValue) ? trimmedValue : null
+}
+
+function parseBackfillValue(mode: BackfillMode, value: string): number | string | null {
+  return mode === 'relativeDays' ? parseRelativeDays(value) : parseAbsoluteDate(value)
+}
+
+function resolveBackfillValue(mode: BackfillMode, value: string, fallback: number | string): number | string {
   const parsedValue = parseBackfillValue(mode, value)
   return parsedValue === null ? fallback : parsedValue
 }
@@ -124,7 +146,7 @@ export class OtterSyncSettingTab extends PluginSettingTab {
               firstRunBackfillValue: resolveBackfillValue(
                 mode,
                 String(this.plugin.settings.firstRunBackfillValue),
-                DEFAULT_SETTINGS.firstRunBackfillValue as number,
+                mode === 'relativeDays' ? DEFAULT_SETTINGS.firstRunBackfillValue : '1970-01-01',
               ),
             })
           })
@@ -159,7 +181,7 @@ export class OtterSyncSettingTab extends PluginSettingTab {
               forcedBackfillValue: resolveBackfillValue(
                 mode,
                 String(this.plugin.settings.forcedBackfillValue),
-                DEFAULT_SETTINGS.forcedBackfillValue as number,
+                mode === 'relativeDays' ? DEFAULT_SETTINGS.forcedBackfillValue : '1970-01-01',
               ),
             })
           })

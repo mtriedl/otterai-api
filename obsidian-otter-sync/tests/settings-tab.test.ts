@@ -124,6 +124,33 @@ describe('OtterSync settings tab', () => {
     expect(plugin.settings.forcedBackfillValue).toBe(14)
   })
 
+  it('switches absolute-date backfill modes to valid date defaults', async () => {
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+    plugin.settings = {
+      ...DEFAULT_SETTINGS,
+      firstRunBackfillMode: 'relativeDays',
+      firstRunBackfillValue: 7,
+      forcedBackfillMode: 'relativeDays',
+      forcedBackfillValue: 30,
+    }
+    plugin.state = { ...DEFAULT_SYNC_STATE }
+    plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS }
+
+    const { OtterSyncSettingTab } = await import('../src/settings-tab')
+    const tab = new OtterSyncSettingTab(plugin.app as never, plugin)
+
+    tab.display()
+
+    await getRecordedSetting(tab, 'First-run backfill').dropdownChangeHandlers[0]?.('absoluteDate')
+    await getRecordedSetting(tab, 'Forced sync backfill').dropdownChangeHandlers[0]?.('absoluteDate')
+
+    expect(plugin.settings.firstRunBackfillMode).toBe('absoluteDate')
+    expect(plugin.settings.firstRunBackfillValue).toBe('1970-01-01')
+    expect(plugin.settings.forcedBackfillMode).toBe('absoluteDate')
+    expect(plugin.settings.forcedBackfillValue).toBe('1970-01-01')
+  })
+
   it('ignores invalid relative-day backfill values', async () => {
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
@@ -143,6 +170,27 @@ describe('OtterSync settings tab', () => {
     await getRecordedSetting(tab, 'First-run backfill').textChangeHandlers[0]?.('not-a-number')
 
     expect(plugin.settings.firstRunBackfillValue).toBe(7)
+  })
+
+  it('ignores invalid absolute-date backfill values', async () => {
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+    plugin.settings = {
+      ...DEFAULT_SETTINGS,
+      firstRunBackfillMode: 'absoluteDate',
+      firstRunBackfillValue: '2026-03-01',
+    }
+    plugin.state = { ...DEFAULT_SYNC_STATE }
+    plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS }
+
+    const { OtterSyncSettingTab } = await import('../src/settings-tab')
+    const tab = new OtterSyncSettingTab(plugin.app as never, plugin)
+
+    tab.display()
+
+    await getRecordedSetting(tab, 'First-run backfill').textChangeHandlers[0]?.('March 1, 2026')
+
+    expect(plugin.settings.firstRunBackfillValue).toBe('2026-03-01')
   })
 
   it('copies the last sync debug info summary', async () => {
