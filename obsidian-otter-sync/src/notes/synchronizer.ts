@@ -3,7 +3,8 @@ import { renderNewNote, renderSummary, renderTranscript } from './renderer'
 import { buildFilename, cleanseTitle } from './title'
 import type { BridgeSpeech } from '../sync/schema'
 
-type FrontmatterValue = string | number | string[]
+type FrontmatterScalar = string | number | boolean | null
+type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[]
 
 interface VaultFileLike {
   path: string
@@ -16,6 +17,7 @@ interface VaultLike {
   modify(file: VaultFileLike, content: string): Promise<void>
   create(path: string, content: string): Promise<VaultFileLike>
   createFolder(path: string): Promise<unknown>
+  getAbstractFileByPath(path: string): VaultFileLike | { path: string } | null
 }
 
 interface AppLike {
@@ -63,6 +65,47 @@ function isDestinationFile(path: string, destinationFolder: string): boolean {
   return path === destinationFolder || path.startsWith(`${destinationFolder}/`)
 }
 
+function splitInlineArrayItems(value: string): string[] {
+  const items: string[] = []
+  let current = ''
+  let inQuotes = false
+  let escapeNext = false
+
+  for (const character of value) {
+    if (escapeNext) {
+      current += character
+      escapeNext = false
+      continue
+    }
+
+    if (character === '\\' && inQuotes) {
+      current += character
+      escapeNext = true
+      continue
+    }
+
+    if (character === '"') {
+      current += character
+      inQuotes = !inQuotes
+      continue
+    }
+
+    if (character === ',' && !inQuotes) {
+      items.push(current.trim())
+      current = ''
+      continue
+    }
+
+    current += character
+  }
+
+  if (current.trim() !== '') {
+    items.push(current.trim())
+  }
+
+  return items
+}
+
 function parseScalar(value: string): FrontmatterValue {
   const trimmed = value.trim()
 
@@ -70,8 +113,30 @@ function parseScalar(value: string): FrontmatterValue {
     return []
   }
 
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    const inner = trimmed.slice(1, -1).trim()
+
+    if (inner === '') {
+      return []
+    }
+
+    return splitInlineArrayItems(inner).map((item) => parseScalar(item) as FrontmatterScalar)
+  }
+
   if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
     return JSON.parse(trimmed)
+  }
+
+  if (trimmed === 'true') {
+    return true
+  }
+
+  if (trimmed === 'false') {
+    return false
+  }
+
+  if (trimmed === 'null' || trimmed === '~') {
+    return null
   }
 
   if (/^-?\d+$/.test(trimmed)) {
@@ -108,7 +173,7 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, Frontm
     const [, key, remainder] = match
 
     if (remainder.trim() === '') {
-      const items: string[] = []
+      const items: FrontmatterScalar[] = []
       let arrayIndex = index + 1
 
       while (arrayIndex < lines.length) {
@@ -117,7 +182,7 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, Frontm
           break
         }
 
-        items.push(String(parseScalar(arrayMatch[1])))
+        items.push(parseScalar(arrayMatch[1]) as FrontmatterScalar)
         arrayIndex += 1
       }
 
@@ -292,20 +357,22 @@ export async function synchronizeNotes({
 }): Promise<SynchronizeNotesResult> {
   const diagnostics: SynchronizerDiagnostic[] = []
 
-  try {
-    await app.vault.createFolder(destinationFolder)
-  } catch {
-    diagnostics.push({
-      code: 'destination-folder-create-failed',
-      message: 'Failed to create destination folder.',
-      path: destinationFolder,
-      fatal: true,
-    })
+  if (app.vault.getAbstractFileByPath(destinationFolder) === null) {
+    try {
+      await app.vault.createFolder(destinationFolder)
+    } catch {
+      diagnostics.push({
+        code: 'destination-folder-create-failed',
+        message: 'Failed to create destination folder.',
+        path: destinationFolder,
+        fatal: true,
+      })
 
-    return {
-      notes: [],
-      diagnostics,
-      stopped: true,
+      return {
+        notes: [],
+        diagnostics,
+        stopped: true,
+      }
     }
   }
 

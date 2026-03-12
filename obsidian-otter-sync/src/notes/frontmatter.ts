@@ -10,7 +10,8 @@ export interface ManagedFrontmatter {
   sync_time: number
 }
 
-type FrontmatterValue = string | number | string[]
+export type FrontmatterScalar = string | number | boolean | null
+export type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[]
 
 const YAML_SENSITIVE_PATTERN = /(^$)|(^\s)|(\s$)|(:\s)|(^[#\-?]|^[\[\]{}!,&*|>'"%@`])|(\n)/
 const YAML_COERCIBLE_PATTERN = /^(?:true|false|null|~|[-+]?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][-+]?\d+)?)$/i
@@ -72,6 +73,14 @@ function renderFrontmatterValue(value: FrontmatterValue): string[] {
 
   if (typeof value === 'string') {
     return [renderYamlString(value)]
+  }
+
+  if (typeof value === 'boolean') {
+    return [String(value)]
+  }
+
+  if (value === null) {
+    return ['null']
   }
 
   return [String(value)]

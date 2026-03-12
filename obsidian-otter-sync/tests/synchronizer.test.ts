@@ -271,6 +271,25 @@ source: not-an-otter-url
     )
   })
 
+  it('does not try to create the destination folder when it already exists', async () => {
+    const app = createFakeApp()
+    app.existingFolders.add('Meetings')
+    app.failCreateFolderFor.add('Meetings')
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.stopped).toBe(false)
+    expect(result.notes[0]).toMatchObject({
+      status: 'created',
+      path: 'Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md',
+    })
+    expect(app.createdFolders).toEqual([])
+  })
+
   it('preserves canonical user notes verbatim during a standard managed update without normalization', async () => {
     const app = createFakeApp()
     app.fileContents.set(
@@ -317,5 +336,59 @@ Old transcript
     expect(content).toContain('## User Notes\n\n\nKeep this paragraph exactly.\n\nAnd keep this trailing gap.\n\n\n## Summary')
     expect(content).toContain('tags: []')
     expect(content).toContain('## Summary\n\nFresh summary')
+  })
+
+  it('preserves booleans nulls inline arrays and quoted strings in unknown frontmatter keys', async () => {
+    const app = createFakeApp()
+    app.fileContents.set(
+      'Meetings/typed-frontmatter.md',
+      `---
+otid: jqb7OHo6mrHtCuMkyLN0nUS8mxY
+date: 2026-03-11
+type: meeting
+attendees:
+  - Legacy Person
+tags:
+  - inbox
+published: true
+archived: false
+reviewed_at: null
+aliases: [alpha, "beta gamma"]
+score: 7
+owner: "123"
+source: https://otter.ai/u/old-value
+sync_time: 1773246700
+---
+
+# Old Title
+
+## User Notes
+
+typed metadata
+
+## Summary
+
+Old summary
+
+## Transcript
+
+Old transcript
+`,
+    )
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech({ summary_markdown: 'Fresh summary' })],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'updated', path: 'Meetings/typed-frontmatter.md' })
+    const content = app.fileContents.get('Meetings/typed-frontmatter.md')
+    expect(content).toContain('published: true')
+    expect(content).toContain('archived: false')
+    expect(content).toContain('reviewed_at: null')
+    expect(content).toContain('aliases:\n  - alpha\n  - beta gamma')
+    expect(content).toContain('score: 7')
+    expect(content).toContain('owner: "123"')
   })
 })

@@ -9,11 +9,6 @@ export interface FakeFolder {
   path: string
 }
 
-type VaultEntry = {
-  path: string
-  content: string
-}
-
 export interface FakeApp {
   isDesktopOnly: boolean
   processExecutionAvailable: boolean
@@ -23,6 +18,7 @@ export interface FakeApp {
     modify(file: FakeFile, content: string): Promise<void>
     create(path: string, content: string): Promise<FakeFile>
     createFolder(path: string): Promise<FakeFolder>
+    getAbstractFileByPath(path: string): FakeFile | FakeFolder | null
   }
   workspace: {
     getFileByPath(path: string): FakeFile | null
@@ -30,12 +26,14 @@ export interface FakeApp {
   fileContents: Map<string, string>
   createdFolders: string[]
   failCreateFolderFor: Set<string>
+  existingFolders: Set<string>
 }
 
 export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp {
   const fileContents = new Map<string, string>()
   const createdFolders: string[] = []
   const failCreateFolderFor = new Set<string>()
+  const existingFolders = new Set<string>()
 
   const getFile = (path: string): FakeFile | null => {
     if (!fileContents.has(path)) {
@@ -82,8 +80,22 @@ export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp {
           throw new Error(`Failed to create folder: ${path}`)
         }
 
+        existingFolders.add(path)
         createdFolders.push(path)
         return { path }
+      },
+      getAbstractFileByPath(path: string): FakeFile | FakeFolder | null {
+        const file = getFile(path)
+
+        if (file) {
+          return file
+        }
+
+        if (existingFolders.has(path)) {
+          return { path }
+        }
+
+        return null
       },
     },
     workspace: {
@@ -94,6 +106,7 @@ export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp {
     fileContents,
     createdFolders,
     failCreateFolderFor,
+    existingFolders,
     ...overrides,
   }
 }
