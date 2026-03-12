@@ -401,6 +401,7 @@ attendees:
   - Legacy Person
 tags:
   - inbox
+project:
 published: true
 archived: false
 reviewed_at: null
@@ -441,6 +442,8 @@ Old transcript
     expect(content).toContain('published: true')
     expect(content).toContain('archived: false')
     expect(content).toContain('reviewed_at: null')
+    expect(content).toContain('project: null')
+    expect(content).not.toContain('project: []')
     expect(content).toContain('aliases:\n  - alpha\n  - beta gamma')
     expect(content).toContain('score: 7')
     expect(content).toContain('ratio: 3.14')

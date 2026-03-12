@@ -193,7 +193,7 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, Frontm
         arrayIndex += 1
       }
 
-      frontmatter[key] = items
+      frontmatter[key] = items.length === 0 ? null : items
       index = arrayIndex - 1
       continue
     }
