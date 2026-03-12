@@ -36,15 +36,17 @@ export class PluginSettingTab {
 }
 
 class TextComponent {
-  constructor(registerOnChange) {
+  constructor(registerOnChange, setRecordedValue) {
     this.registerOnChange = registerOnChange
+    this.setRecordedValue = setRecordedValue
   }
 
   setPlaceholder() {
     return this
   }
 
-  setValue() {
+  setValue(value) {
+    this.setRecordedValue(value)
     return this
   }
 
@@ -57,15 +59,17 @@ class TextComponent {
 class TextAreaComponent extends TextComponent {}
 
 class DropdownComponent {
-  constructor(registerOnChange) {
+  constructor(registerOnChange, setRecordedValue) {
     this.registerOnChange = registerOnChange
+    this.setRecordedValue = setRecordedValue
   }
 
   addOption() {
     return this
   }
 
-  setValue() {
+  setValue(value) {
+    this.setRecordedValue(value)
     return this
   }
 
@@ -76,11 +80,13 @@ class DropdownComponent {
 }
 
 class ToggleComponent {
-  constructor(registerOnChange) {
+  constructor(registerOnChange, setRecordedValue) {
     this.registerOnChange = registerOnChange
+    this.setRecordedValue = setRecordedValue
   }
 
-  setValue() {
+  setValue(value) {
+    this.setRecordedValue(value)
     return this
   }
 
@@ -115,6 +121,10 @@ export class Setting {
       dropdowns: 0,
       toggles: 0,
       buttons: [],
+      textValues: [],
+      textAreaValues: [],
+      dropdownValues: [],
+      toggleValues: [],
       textChangeHandlers: [],
       textAreaChangeHandlers: [],
       dropdownChangeHandlers: [],
@@ -136,32 +146,44 @@ export class Setting {
 
   addText(cb) {
     this.record.textInputs += 1
+    const index = this.record.textValues.push('') - 1
     cb(new TextComponent((callback) => {
       this.record.textChangeHandlers.push(callback)
+    }, (value) => {
+      this.record.textValues[index] = value
     }))
     return this
   }
 
   addTextArea(cb) {
     this.record.textAreas += 1
+    const index = this.record.textAreaValues.push('') - 1
     cb(new TextAreaComponent((callback) => {
       this.record.textAreaChangeHandlers.push(callback)
+    }, (value) => {
+      this.record.textAreaValues[index] = value
     }))
     return this
   }
 
   addDropdown(cb) {
     this.record.dropdowns += 1
+    const index = this.record.dropdownValues.push('') - 1
     cb(new DropdownComponent((callback) => {
       this.record.dropdownChangeHandlers.push(callback)
+    }, (value) => {
+      this.record.dropdownValues[index] = value
     }))
     return this
   }
 
   addToggle(cb) {
     this.record.toggles += 1
+    const index = this.record.toggleValues.push(false) - 1
     cb(new ToggleComponent((callback) => {
       this.record.toggleChangeHandlers.push(callback)
+    }, (value) => {
+      this.record.toggleValues[index] = value
     }))
     return this
   }

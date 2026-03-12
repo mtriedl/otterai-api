@@ -149,6 +149,8 @@ describe('OtterSync settings tab', () => {
     expect(plugin.settings.firstRunBackfillValue).toBe('1970-01-01')
     expect(plugin.settings.forcedBackfillMode).toBe('absoluteDate')
     expect(plugin.settings.forcedBackfillValue).toBe('1970-01-01')
+    expect(getRecordedSetting(tab, 'First-run backfill').textValues[0]).toBe('1970-01-01')
+    expect(getRecordedSetting(tab, 'Forced sync backfill').textValues[0]).toBe('1970-01-01')
   })
 
   it('ignores invalid relative-day backfill values', async () => {
@@ -167,9 +169,11 @@ describe('OtterSync settings tab', () => {
 
     tab.display()
 
+    getRecordedSetting(tab, 'First-run backfill').textValues[0] = 'not-a-number'
     await getRecordedSetting(tab, 'First-run backfill').textChangeHandlers[0]?.('not-a-number')
 
     expect(plugin.settings.firstRunBackfillValue).toBe(7)
+    expect(getRecordedSetting(tab, 'First-run backfill').textValues[0]).toBe('7')
   })
 
   it('ignores invalid absolute-date backfill values', async () => {
@@ -188,9 +192,11 @@ describe('OtterSync settings tab', () => {
 
     tab.display()
 
+    getRecordedSetting(tab, 'First-run backfill').textValues[0] = 'March 1, 2026'
     await getRecordedSetting(tab, 'First-run backfill').textChangeHandlers[0]?.('March 1, 2026')
 
     expect(plugin.settings.firstRunBackfillValue).toBe('2026-03-01')
+    expect(getRecordedSetting(tab, 'First-run backfill').textValues[0]).toBe('2026-03-01')
   })
 
   it('copies the last sync debug info summary', async () => {

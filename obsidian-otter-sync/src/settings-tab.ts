@@ -94,6 +94,11 @@ export class OtterSyncSettingTab extends PluginSettingTab {
     this.plugin = plugin
   }
 
+  private async updateBackfillSettings(update: Partial<OtterSyncPlugin['settings']>): Promise<void> {
+    await this.plugin.updateSettings(update)
+    this.display()
+  }
+
   display(): void {
     this.containerEl.empty()
 
@@ -141,7 +146,7 @@ export class OtterSyncSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.firstRunBackfillMode)
           .onChange(async (value) => {
             const mode = value as BackfillMode
-            await this.plugin.updateSettings({
+            await this.updateBackfillSettings({
               firstRunBackfillMode: mode,
               firstRunBackfillValue: resolveBackfillValue(
                 mode,
@@ -158,10 +163,11 @@ export class OtterSyncSettingTab extends PluginSettingTab {
             const parsedValue = parseBackfillValue(this.plugin.settings.firstRunBackfillMode, value)
 
             if (parsedValue === null) {
+              this.display()
               return
             }
 
-            await this.plugin.updateSettings({
+            await this.updateBackfillSettings({
               firstRunBackfillValue: parsedValue,
             })
           })
@@ -176,7 +182,7 @@ export class OtterSyncSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.forcedBackfillMode)
           .onChange(async (value) => {
             const mode = value as BackfillMode
-            await this.plugin.updateSettings({
+            await this.updateBackfillSettings({
               forcedBackfillMode: mode,
               forcedBackfillValue: resolveBackfillValue(
                 mode,
@@ -193,10 +199,11 @@ export class OtterSyncSettingTab extends PluginSettingTab {
             const parsedValue = parseBackfillValue(this.plugin.settings.forcedBackfillMode, value)
 
             if (parsedValue === null) {
+              this.display()
               return
             }
 
-            await this.plugin.updateSettings({
+            await this.updateBackfillSettings({
               forcedBackfillValue: parsedValue,
             })
           })
