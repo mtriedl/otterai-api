@@ -1,0 +1,289 @@
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+import { synchronizeNotes } from '../src/notes/synchronizer'
+import type { BridgeSpeech } from '../src/sync/schema'
+import { createFakeApp } from './helpers/fake-app'
+
+async function readFixture(name: string): Promise<string> {
+  return readFile(path.join(import.meta.dirname, 'fixtures', name), 'utf8')
+}
+
+function makeSpeech(overrides: Partial<BridgeSpeech> = {}): BridgeSpeech {
+  return {
+    otid: 'jqb7OHo6mrHtCuMkyLN0nUS8mxY',
+    source_url: 'https://otter.ai/u/4ypoVqo4Z4ZUagOc-VfM7mugJIA',
+    title: 'Quarterly Planning Review Kickoff',
+    created_at: 1773246700,
+    modified_time: 1773246769,
+    attendees: ['Alice', 'Bob'],
+    summary_markdown: '- New summary bullet',
+    transcript_segments: [
+      {
+        speaker_name: 'Alice',
+        timestamp: '0:00',
+        text: 'Welcome to the meeting.',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+describe('synchronizeNotes', () => {
+  it('matches existing notes by otid within the destination folder and updates without renaming', async () => {
+    const app = createFakeApp()
+    app.fileContents.set('Meetings/2026-03-11 - Old Title.md', await readFixture('existing-note.md'))
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech({ title: 'Refreshed Meeting Title' })],
+    })
+
+    expect(result.notes).toHaveLength(1)
+    expect(result.notes[0]).toMatchObject({
+      otid: 'jqb7OHo6mrHtCuMkyLN0nUS8mxY',
+      status: 'updated',
+      path: 'Meetings/2026-03-11 - Old Title.md',
+      normalized: false,
+    })
+    expect(app.workspace.getFileByPath('Meetings/2026-03-11 - Old Title.md')).not.toBeNull()
+    expect(app.workspace.getFileByPath('Meetings/2026-03-11 - Refreshed Meeting Title.md')).toBeNull()
+
+    const content = app.fileContents.get('Meetings/2026-03-11 - Old Title.md')
+    expect(content).toContain('# Refreshed Meeting Title')
+    expect(content).toContain('## User Notes\n\nKeep this paragraph exactly.')
+    expect(content).toContain('tags:\n  - inbox')
+    expect(content).toContain('project: Apollo')
+    expect(content).toContain('source: https://otter.ai/u/4ypoVqo4Z4ZUagOc-VfM7mugJIA')
+    expect(content).toContain('sync_time: 1773246769')
+  })
+
+  it('creates a new note in the destination folder and uses a short otid suffix on filename collision', async () => {
+    const app = createFakeApp()
+    app.fileContents.set('Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md', '# unrelated')
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.notes[0]).toMatchObject({
+      status: 'created',
+      path: 'Meetings/2026-03-11 - Quarterly Planning Review Kickoff - jqb7OHo6.md',
+      normalized: false,
+    })
+    expect(app.createdFolders).toContain('Meetings')
+    expect(app.fileContents.get('Meetings/2026-03-11 - Quarterly Planning Review Kickoff - jqb7OHo6.md')).toContain(
+      '## User Notes',
+    )
+  })
+
+  it('scans only the configured destination folder for matches and duplicates', async () => {
+    const app = createFakeApp()
+    app.fileContents.set('Archive/2026-03-11 - Quarterly Planning Review Kickoff.md', await readFixture('existing-note.md'))
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.notes[0]).toMatchObject({
+      status: 'created',
+      path: 'Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md',
+    })
+  })
+
+  it('fails a note update when user notes cannot be identified exactly once', async () => {
+    const app = createFakeApp()
+    app.fileContents.set(
+      'Meetings/unsafe.md',
+      `---
+otid: jqb7OHo6mrHtCuMkyLN0nUS8mxY
+source: https://otter.ai/u/4ypoVqo4Z4ZUagOc-VfM7mugJIA
+sync_time: 1773246700
+---
+
+# Unsafe Title
+
+## User Notes
+
+one
+
+## User Notes
+
+two
+`,
+    )
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'failed', path: 'Meetings/unsafe.md' })
+    expect(result.notes[0].diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'unsafe-user-notes' })]),
+    )
+  })
+
+  it('normalizes malformed managed sections when user notes appear exactly once', async () => {
+    const app = createFakeApp()
+    app.fileContents.set('Meetings/malformed.md', await readFixture('malformed-user-note.md'))
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'updated', normalized: true, path: 'Meetings/malformed.md' })
+    expect(result.notes[0].diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'normalized-managed-sections' })]),
+    )
+    const content = app.fileContents.get('Meetings/malformed.md')
+    expect(content).toContain('## User Notes\n\nThis needs to survive.')
+    expect(content).toContain('## Summary\n\n- New summary bullet')
+    expect(content).toContain('## Transcript\n\nAlice 0:00\nWelcome to the meeting.')
+  })
+
+  it('migrates legacy source matches, but records invalid legacy source diagnostics without blocking create flow', async () => {
+    const app = createFakeApp()
+    app.fileContents.set(
+      'Meetings/legacy.md',
+      `---
+date: 2026-03-11
+type: meeting
+source: https://otter.ai/u/jqb7OHo6mrHtCuMkyLN0nUS8mxY
+sync_time: 1773246700
+---
+
+# Legacy Match
+
+## User Notes
+
+legacy notes
+
+## Summary
+
+Old summary
+
+## Transcript
+
+Old transcript
+`,
+    )
+    app.fileContents.set(
+      'Meetings/unparseable.md',
+      `---
+source: not-an-otter-url
+---
+
+# Bad legacy source
+`,
+    )
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech(), makeSpeech({ otid: 'second-otid-1234567890', title: 'New Meeting Title' })],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'updated', path: 'Meetings/legacy.md' })
+    expect(app.fileContents.get('Meetings/legacy.md')).toContain('otid: jqb7OHo6mrHtCuMkyLN0nUS8mxY')
+    expect(result.notes[1]).toMatchObject({ status: 'created', path: 'Meetings/2026-03-11 - New Meeting Title.md' })
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'invalid-legacy-source', path: 'Meetings/unparseable.md' }),
+      ]),
+    )
+  })
+
+  it('fails duplicate matches and reports the conflicting note paths', async () => {
+    const app = createFakeApp()
+    const existing = await readFixture('existing-note.md')
+    app.fileContents.set('Meetings/one.md', existing)
+    app.fileContents.set('Meetings/two.md', existing)
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'failed' })
+    expect(result.notes[0].diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'duplicate-note-match',
+          conflictingPaths: ['Meetings/one.md', 'Meetings/two.md'],
+        }),
+      ]),
+    )
+  })
+
+  it('skips notes that are not newer than sync_time and updates managed content when they are newer', async () => {
+    const app = createFakeApp()
+    const existing = await readFixture('existing-note.md')
+    app.fileContents.set('Meetings/skipped.md', existing)
+    app.fileContents.set(
+      'Meetings/updated.md',
+      existing
+        .replace('jqb7OHo6mrHtCuMkyLN0nUS8mxY', 'updated-otid-1234567890')
+        .replace('https://otter.ai/u/old-value', 'https://otter.ai/u/updated-otid-1234567890')
+        .replace('Old Title', 'Another Old Title'),
+    )
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [
+        makeSpeech({ modified_time: 1773246700 }),
+        makeSpeech({ otid: 'updated-otid-1234567890', title: 'Updated Title', source_url: 'https://otter.ai/u/updated-otid-1234567890' }),
+      ],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'skipped', path: 'Meetings/skipped.md' })
+    expect(result.notes[1]).toMatchObject({ status: 'updated', path: 'Meetings/updated.md' })
+    expect(app.fileContents.get('Meetings/updated.md')).toContain('# Updated Title')
+  })
+
+  it('creates the destination folder before writing and stops the batch on folder creation failure', async () => {
+    const app = createFakeApp()
+    app.failCreateFolderFor.add('Meetings')
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech(), makeSpeech({ otid: 'second-otid-1234567890', title: 'Second Title' })],
+    })
+
+    expect(result.stopped).toBe(true)
+    expect(result.notes).toEqual([])
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'destination-folder-create-failed', fatal: true, path: 'Meetings' }),
+      ]),
+    )
+  })
+
+  it('preserves canonical user notes verbatim during a standard managed update without normalization', async () => {
+    const app = createFakeApp()
+    app.fileContents.set('Meetings/standard.md', await readFixture('existing-note.md'))
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech({ summary_markdown: 'Fresh summary' })],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'updated', normalized: false })
+    const content = app.fileContents.get('Meetings/standard.md')
+    expect(content).toContain('## User Notes\n\nKeep this paragraph exactly.')
+    expect(content).toContain('## Summary\n\nFresh summary')
+  })
+})
