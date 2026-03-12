@@ -124,7 +124,11 @@ describe('OtterSync settings tab', () => {
     await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
-    plugin.settings = { ...DEFAULT_SETTINGS, destinationFolder: 'meetings' }
+    plugin.settings = {
+      ...DEFAULT_SETTINGS,
+      destinationFolder: 'meetings',
+      commandTemplate: 'python sync.py --token super-secret --vault main',
+    }
     plugin.state = { ...DEFAULT_SYNC_STATE, lastFetchWatermark: 99 }
     plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS, lastErrorSummary: 'sync failed' }
 
@@ -140,6 +144,9 @@ describe('OtterSync settings tab', () => {
 
     expect(writeText).toHaveBeenCalledTimes(1)
     expect(writeText.mock.calls[0]?.[0]).toContain('"destinationFolder": "meetings"')
+    expect(writeText.mock.calls[0]?.[0]).toContain('"commandTemplateSummary": "Configured (redacted)"')
+    expect(writeText.mock.calls[0]?.[0]).not.toContain('"commandTemplate":')
+    expect(writeText.mock.calls[0]?.[0]).not.toContain('super-secret')
     expect(writeText.mock.calls[0]?.[0]).toContain('"lastFetchWatermark": 99')
     expect(writeText.mock.calls[0]?.[0]).toContain('"lastErrorSummary": "sync failed"')
     vi.unstubAllGlobals()

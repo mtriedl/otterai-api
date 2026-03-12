@@ -20,9 +20,14 @@ function formatRecentDiagnostics(recentRuns: unknown[]): string {
 }
 
 function buildDebugInfo(plugin: OtterSyncPlugin): string {
+  const { commandTemplate: _commandTemplate, ...safeSettings } = plugin.settings
+
   return JSON.stringify(
     {
-      settings: plugin.settings,
+      settings: {
+        ...safeSettings,
+        commandTemplateSummary: plugin.settings.commandTemplate.trim() === '' ? 'Not configured' : 'Configured (redacted)',
+      },
       state: plugin.state,
       diagnostics: plugin.diagnostics,
     },
