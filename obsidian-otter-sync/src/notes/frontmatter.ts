@@ -12,6 +12,16 @@ export interface ManagedFrontmatter {
 
 type FrontmatterValue = string | number | string[]
 
+const YAML_SENSITIVE_PATTERN = /(^$)|(^\s)|(\s$)|(:\s)|(^[#\-?]|^[\[\]{}!,&*|>'"%@`])|(\n)/
+
+function quoteYamlString(value: string): string {
+  return JSON.stringify(value)
+}
+
+function renderYamlString(value: string): string {
+  return YAML_SENSITIVE_PATTERN.test(value) ? quoteYamlString(value) : value
+}
+
 export function normalizeAttendees(attendees: string[]): string[] {
   const seen = new Set<string>()
   const normalized: string[] = []
@@ -56,7 +66,11 @@ function renderFrontmatterValue(value: FrontmatterValue): string[] {
       return ['[]']
     }
 
-    return ['', ...value.map((item) => `  - ${item}`)]
+    return ['', ...value.map((item) => `  - ${renderYamlString(item)}`)]
+  }
+
+  if (typeof value === 'string') {
+    return [renderYamlString(value)]
   }
 
   return [String(value)]

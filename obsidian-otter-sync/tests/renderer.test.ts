@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { mergeManagedFrontmatter, normalizeAttendees } from '../src/notes/frontmatter'
+import { mergeManagedFrontmatter, normalizeAttendees, renderFrontmatter } from '../src/notes/frontmatter'
 import { buildFilename, cleanseTitle } from '../src/notes/title'
 import { renderNewNote, renderSummary, renderTranscript } from '../src/notes/renderer'
 import type { BridgeSpeech } from '../src/sync/schema'
@@ -10,7 +10,7 @@ function makeSpeech(overrides: Partial<BridgeSpeech> = {}): BridgeSpeech {
     otid: 'jqb7OHo6mrHtCuMkyLN0nUS8mxY',
     source_url: 'https://otter.ai/u/4ypoVqo4Z4ZUagOc-VfM7mugJIA',
     title: '  Quarterly   Planning: Review / Kickoff?  ',
-    created_at: Date.UTC(2026, 4, 2, 15, 30, 0),
+    created_at: 1773246700,
     modified_time: 1773246769,
     attendees: [' Alice ', 'Bob', 'Alice', '  Bob  ', 'Carol'],
     summary_markdown: '- First bullet\n- Second bullet',
@@ -36,7 +36,7 @@ describe('renderNewNote', () => {
 
     expect(rendered).toBe(`---
 otid: jqb7OHo6mrHtCuMkyLN0nUS8mxY
-date: 2026-05-02
+date: 2026-03-11
 type: meeting
 attendees:
   - Alice
@@ -88,7 +88,7 @@ describe('frontmatter helpers', () => {
         },
         {
           otid: 'new-otid',
-          date: '2026-05-02',
+          date: '2026-03-11',
           type: 'meeting',
           attendees: ['Alice'],
           source: 'https://otter.ai/u/new-otid',
@@ -101,10 +101,32 @@ describe('frontmatter helpers', () => {
       tags: ['existing'],
       project: 'Apollo',
       sync_time: 1773246769,
-      date: '2026-05-02',
+      date: '2026-03-11',
       attendees: ['Alice'],
       source: 'https://otter.ai/u/new-otid',
     })
+  })
+
+  it('quotes yaml-sensitive scalar values safely', () => {
+    expect(
+      renderFrontmatter({
+        owner: 'Bob: CEO',
+        tag: '#tag',
+        metadata: '{x}',
+        status: '- blocked',
+        attendees: ['Bob: CEO', '#tag', '{x}', '- blocked'],
+      }),
+    ).toBe(`---
+owner: "Bob: CEO"
+tag: "#tag"
+metadata: "{x}"
+status: "- blocked"
+attendees:
+  - "Bob: CEO"
+  - "#tag"
+  - "{x}"
+  - "- blocked"
+---`)
   })
 })
 
@@ -131,7 +153,7 @@ describe('title helpers', () => {
   it('builds the base filename and appends a short otid only when collision is flagged', () => {
     const speech = makeSpeech()
 
-    expect(buildFilename(speech, false)).toBe('2026-05-02 - Quarterly Planning Review Kickoff.md')
-    expect(buildFilename(speech, true)).toBe('2026-05-02 - Quarterly Planning Review Kickoff - jqb7OHo6.md')
+    expect(buildFilename(speech, false)).toBe('2026-03-11 - Quarterly Planning Review Kickoff.md')
+    expect(buildFilename(speech, true)).toBe('2026-03-11 - Quarterly Planning Review Kickoff - jqb7OHo6.md')
   })
 })
