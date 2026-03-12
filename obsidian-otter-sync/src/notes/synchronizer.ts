@@ -368,12 +368,13 @@ function buildUpdatedNoteContent(
 ): string {
   const mergedFrontmatter = mergeManagedFrontmatter(existingFrontmatter, buildManagedFrontmatter(speech))
   const frontmatter = renderFrontmatter(mergedFrontmatter as Record<string, FrontmatterValue>)
+  const userNotesWithBoundary = userNotes.endsWith('\n\n') ? userNotes : userNotes.endsWith('\n') ? `${userNotes}\n` : `${userNotes}\n\n`
 
   return `${frontmatter}
 
 # ${cleanseTitle(speech.title)}
 
-## User Notes${userNotes}## Summary
+## User Notes${userNotesWithBoundary}## Summary
 
 ${renderSummary(speech.summary_markdown)}
 

@@ -198,6 +198,42 @@ This stale transcript should be removed.
     expect(content).not.toContain('This stale transcript should be removed.')
   })
 
+  it('keeps a section break when normalized user notes run to eof without a trailing newline', async () => {
+    const app = createFakeApp()
+    app.fileContents.set(
+      'Meetings/eof-user-notes.md',
+      `---
+otid: jqb7OHo6mrHtCuMkyLN0nUS8mxY
+date: 2026-03-11
+type: meeting
+attendees:
+  - Legacy Person
+source: https://otter.ai/u/old-value
+sync_time: 1773246700
+---
+
+# Old Title
+
+## User Notes
+
+Last user note line without trailing newline
+### Summary
+
+stale summary`,
+    )
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'updated', normalized: true, path: 'Meetings/eof-user-notes.md' })
+    const content = app.fileContents.get('Meetings/eof-user-notes.md')
+    expect(content).toContain('Last user note line without trailing newline\n\n## Summary')
+    expect(content).not.toContain('Last user note line without trailing newline## Summary')
+  })
+
   it('normalization preserves only user notes when later managed headings are renamed or missing', async () => {
     const app = createFakeApp()
     app.fileContents.set(
