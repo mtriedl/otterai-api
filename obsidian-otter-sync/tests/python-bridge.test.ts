@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import process from 'node:process'
 
 import { validateBridgePayload } from '../src/sync/schema'
 import {
@@ -128,14 +129,16 @@ describe('command template helpers', () => {
 describe('runBridgeCommand', () => {
   let tempDir = ''
   let harnessPath = ''
+  let timeoutPidPath = ''
 
   beforeAll(async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), 'python-bridge-test-'))
     harnessPath = path.join(tempDir, 'bridge-harness.mjs')
+    timeoutPidPath = path.join(tempDir, 'timeout.pid')
 
     await writeFile(
       harnessPath,
-      `import { readFile } from 'node:fs/promises'
+      `import { readFile, writeFile } from 'node:fs/promises'
 
 const [, , scenario, fixtureFile, since, mode] = process.argv
 
@@ -172,6 +175,14 @@ if (scenario === 'timeout') {
     }, 10_000)
   })
 }
+
+if (scenario === 'ignore-term') {
+  await writeFile(fixtureFile, String(process.pid), 'utf8')
+  process.on('SIGTERM', () => undefined)
+  process.stderr.write('ignoring sigterm', () => {
+    setInterval(() => undefined, 1_000)
+  })
+}
 `,
       'utf8',
     )
@@ -185,6 +196,31 @@ if (scenario === 'timeout') {
 
   function makeTemplate(scenario: string): string {
     return `"${process.execPath}" "${harnessPath}" ${scenario} "${fixturePath}" {since} {mode}`
+  }
+
+  function makeExecTemplate(scenario: string, dataPath: string): string {
+    return `exec "${process.execPath}" "${harnessPath}" ${scenario} "${dataPath}" {since} {mode}`
+  }
+
+  async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs
+
+    while (Date.now() < deadline) {
+      try {
+        process.kill(pid, 0)
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code === 'ESRCH') {
+          return true
+        }
+
+        throw error
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+
+    return false
   }
 
   it('captures stdout, stderr, exit code, and the validated payload', async () => {
@@ -254,6 +290,24 @@ if (scenario === 'timeout') {
       name: 'PythonBridgeTimeoutError',
       exitCode: null,
     })
+  })
+
+  it('forcibly terminates a bridge that ignores SIGTERM', async () => {
+    await expect(
+      runBridgeCommand({
+        commandTemplate: makeExecTemplate('ignore-term', timeoutPidPath),
+        since: '1773246700',
+        mode: 'manual',
+        timeoutMs: 250,
+      }),
+    ).rejects.toMatchObject({
+      name: 'PythonBridgeTimeoutError',
+      exitCode: null,
+    })
+
+    const pid = Number.parseInt(await readFile(timeoutPidPath, 'utf8'), 10)
+    expect(Number.isInteger(pid)).toBe(true)
+    await expect(waitForProcessExit(pid, 500)).resolves.toBe(true)
   })
 
   it('treats command-template validation failures as configuration errors', async () => {

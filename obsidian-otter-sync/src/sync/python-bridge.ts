@@ -70,6 +70,7 @@ export class PythonBridgeTimeoutError extends PythonBridgeExecutionError {
 }
 
 const DEFAULT_TIMEOUT_MS = 60_000
+const FORCE_KILL_GRACE_MS = 100
 const QUOTED_PLACEHOLDER_PATTERN = /(['"])\{(since|mode)\}\1/
 
 function quoteForPosixShell(value: string): string {
@@ -152,6 +153,7 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
   let stdout = ''
   let stderr = ''
   let timedOut = false
+  let exited = false
 
   child.stdout.setEncoding('utf8')
   child.stderr.setEncoding('utf8')
@@ -169,10 +171,10 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
       timedOut = true
       child.kill('SIGTERM')
       setTimeout(() => {
-        if (!child.killed) {
+        if (!exited) {
           child.kill('SIGKILL')
         }
-      }, 100).unref()
+      }, FORCE_KILL_GRACE_MS).unref()
     }, timeoutMs)
 
     child.once('error', (error) => {
@@ -187,6 +189,7 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
     })
 
     child.once('close', (exitCode) => {
+      exited = true
       clearTimeout(timeout)
 
       if (timedOut) {
