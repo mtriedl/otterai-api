@@ -293,6 +293,45 @@ Stale managed transcript that must not survive.
     expect(content).not.toContain('Stale managed transcript that must not survive.')
   })
 
+  it('preserves user-owned h2 content when managed sections are missing entirely', async () => {
+    const app = createFakeApp()
+    app.fileContents.set(
+      'Meetings/missing-managed.md',
+      `---
+otid: jqb7OHo6mrHtCuMkyLN0nUS8mxY
+date: 2026-03-11
+type: meeting
+attendees:
+  - Legacy Person
+source: https://otter.ai/u/old-value
+sync_time: 1773246700
+---
+
+# Old Title
+
+## User Notes
+
+Keep this note body.
+
+## Decisions
+
+- Preserve this user-owned h2 content.
+`,
+    )
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'updated', normalized: true, path: 'Meetings/missing-managed.md' })
+    const content = app.fileContents.get('Meetings/missing-managed.md')
+    expect(content).toContain('## User Notes\n\nKeep this note body.\n\n## Decisions\n\n- Preserve this user-owned h2 content.\n\n## Summary')
+    expect(content).toContain('## Summary\n\n- New summary bullet')
+    expect(content).toContain('## Transcript\n\nAlice 0:00\nWelcome to the meeting.')
+  })
+
   it('migrates legacy source matches, but records invalid legacy source diagnostics without blocking create flow', async () => {
     const app = createFakeApp()
     app.fileContents.set(

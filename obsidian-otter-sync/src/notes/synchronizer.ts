@@ -69,7 +69,6 @@ function isVaultFile(entry: VaultFileLike | VaultFolderLike): entry is VaultFile
 const LEGACY_SOURCE_PATTERN = /^https?:\/\/otter\.ai\/u\/([A-Za-z0-9_-]+)$/
 const USER_NOTES_HEADING = /^## User Notes[ \t]*$/gm
 const SECTION_HEADING_PATTERN = /^## (User Notes|Summary|Transcript)[ \t]*$/gm
-const TOP_LEVEL_SECTION_HEADING_PATTERN = /^##[ \t]+.*$/gm
 const MANAGED_BOUNDARY_HEADING_PATTERN = /^#{2,6}[ \t]+.*(?:summary|transcript).*$/gim
 const YAML_NUMBER_PATTERN = /^[-+]?(?:\d+\.\d+|\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?$/
 
@@ -307,14 +306,6 @@ function collectSectionHeadings(body: string): Array<{ name: string; index: numb
   return headings
 }
 
-function findNextTopLevelHeadingIndex(body: string, startIndex: number): number | null {
-  const pattern = new RegExp(TOP_LEVEL_SECTION_HEADING_PATTERN.source, TOP_LEVEL_SECTION_HEADING_PATTERN.flags)
-  pattern.lastIndex = startIndex
-  const match = pattern.exec(body)
-
-  return match?.index ?? null
-}
-
 function findNextManagedBoundaryIndex(body: string, startIndex: number): number | null {
   const pattern = new RegExp(MANAGED_BOUNDARY_HEADING_PATTERN.source, MANAGED_BOUNDARY_HEADING_PATTERN.flags)
   pattern.lastIndex = startIndex
@@ -349,10 +340,9 @@ function extractUserNotes(body: string): { userNotes: string; normalized: boolea
 
   const nextManagedHeading = headings.find((heading) => heading.index > userHeading.index)
   const nextManagedBoundaryIndex = findNextManagedBoundaryIndex(body, userHeading.end)
-  const nextTopLevelHeadingIndex = findNextTopLevelHeadingIndex(body, userHeading.end)
   const endIndex = isCanonical
     ? (nextManagedHeading?.index ?? body.length)
-    : (nextManagedBoundaryIndex ?? nextTopLevelHeadingIndex ?? body.length)
+    : (nextManagedBoundaryIndex ?? body.length)
   const rawUserNotes = body.slice(userHeading.end, endIndex)
 
   return {
