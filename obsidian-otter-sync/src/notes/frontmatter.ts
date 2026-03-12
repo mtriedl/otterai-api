@@ -13,13 +13,14 @@ export interface ManagedFrontmatter {
 type FrontmatterValue = string | number | string[]
 
 const YAML_SENSITIVE_PATTERN = /(^$)|(^\s)|(\s$)|(:\s)|(^[#\-?]|^[\[\]{}!,&*|>'"%@`])|(\n)/
+const YAML_COERCIBLE_PATTERN = /^(?:true|false|null|~|[-+]?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][-+]?\d+)?)$/i
 
 function quoteYamlString(value: string): string {
   return JSON.stringify(value)
 }
 
 function renderYamlString(value: string): string {
-  return YAML_SENSITIVE_PATTERN.test(value) ? quoteYamlString(value) : value
+  return YAML_SENSITIVE_PATTERN.test(value) || YAML_COERCIBLE_PATTERN.test(value) ? quoteYamlString(value) : value
 }
 
 export function normalizeAttendees(attendees: string[]): string[] {

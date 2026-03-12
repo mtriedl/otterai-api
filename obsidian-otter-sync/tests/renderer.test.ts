@@ -128,6 +128,28 @@ attendees:
   - "- blocked"
 ---`)
   })
+
+  it('quotes string scalars that yaml would otherwise coerce', () => {
+    expect(
+      renderFrontmatter({
+        boolTrue: 'true',
+        boolFalse: 'false',
+        nullLike: 'null',
+        numeric: '123',
+        attendees: ['true', 'false', 'null', '123'],
+      }),
+    ).toBe(`---
+boolTrue: "true"
+boolFalse: "false"
+nullLike: "null"
+numeric: "123"
+attendees:
+  - "true"
+  - "false"
+  - "null"
+  - "123"
+---`)
+  })
 })
 
 describe('managed section renderers', () => {
