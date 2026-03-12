@@ -46,9 +46,20 @@ export type RecordedSetting = {
   dropdowns: number
   toggles: number
   buttons: string[]
+  textChangeHandlers: Array<(value: string) => unknown>
+  textAreaChangeHandlers: Array<(value: string) => unknown>
+  dropdownChangeHandlers: Array<(value: string) => unknown>
+  toggleChangeHandlers: Array<(value: boolean) => unknown>
+  buttonClickHandlers: Array<() => unknown>
 }
 
 class TextComponent {
+  private readonly registerOnChange: (callback: (value: string) => unknown) => void
+
+  constructor(registerOnChange: (callback: (value: string) => unknown) => void) {
+    this.registerOnChange = registerOnChange
+  }
+
   setPlaceholder(): this {
     return this
   }
@@ -57,7 +68,8 @@ class TextComponent {
     return this
   }
 
-  onChange(): this {
+  onChange(callback: (value: string) => unknown): this {
+    this.registerOnChange(callback)
     return this
   }
 }
@@ -65,6 +77,12 @@ class TextComponent {
 class TextAreaComponent extends TextComponent {}
 
 class DropdownComponent {
+  private readonly registerOnChange: (callback: (value: string) => unknown) => void
+
+  constructor(registerOnChange: (callback: (value: string) => unknown) => void) {
+    this.registerOnChange = registerOnChange
+  }
+
   addOption(): this {
     return this
   }
@@ -73,17 +91,25 @@ class DropdownComponent {
     return this
   }
 
-  onChange(): this {
+  onChange(callback: (value: string) => unknown): this {
+    this.registerOnChange(callback)
     return this
   }
 }
 
 class ToggleComponent {
+  private readonly registerOnChange: (callback: (value: boolean) => unknown) => void
+
+  constructor(registerOnChange: (callback: (value: boolean) => unknown) => void) {
+    this.registerOnChange = registerOnChange
+  }
+
   setValue(): this {
     return this
   }
 
-  onChange(): this {
+  onChange(callback: (value: boolean) => unknown): this {
+    this.registerOnChange(callback)
     return this
   }
 }
@@ -100,7 +126,8 @@ class ButtonComponent {
     return this
   }
 
-  onClick(): this {
+  onClick(callback: () => unknown): this {
+    this.setting.buttonClickHandlers.push(callback)
     return this
   }
 }
@@ -116,6 +143,11 @@ export class Setting {
       dropdowns: 0,
       toggles: 0,
       buttons: [],
+      textChangeHandlers: [],
+      textAreaChangeHandlers: [],
+      dropdownChangeHandlers: [],
+      toggleChangeHandlers: [],
+      buttonClickHandlers: [],
     }
     containerEl.children.push(this.record)
   }
@@ -132,25 +164,33 @@ export class Setting {
 
   addText(cb: (component: TextComponent) => void): this {
     this.record.textInputs += 1
-    cb(new TextComponent())
+    cb(new TextComponent((callback) => {
+      this.record.textChangeHandlers.push(callback)
+    }))
     return this
   }
 
   addTextArea(cb: (component: TextAreaComponent) => void): this {
     this.record.textAreas += 1
-    cb(new TextAreaComponent())
+    cb(new TextAreaComponent((callback) => {
+      this.record.textAreaChangeHandlers.push(callback)
+    }))
     return this
   }
 
   addDropdown(cb: (component: DropdownComponent) => void): this {
     this.record.dropdowns += 1
-    cb(new DropdownComponent())
+    cb(new DropdownComponent((callback) => {
+      this.record.dropdownChangeHandlers.push(callback)
+    }))
     return this
   }
 
   addToggle(cb: (component: ToggleComponent) => void): this {
     this.record.toggles += 1
-    cb(new ToggleComponent())
+    cb(new ToggleComponent((callback) => {
+      this.record.toggleChangeHandlers.push(callback)
+    }))
     return this
   }
 

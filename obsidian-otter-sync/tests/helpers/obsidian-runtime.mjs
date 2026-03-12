@@ -36,6 +36,10 @@ export class PluginSettingTab {
 }
 
 class TextComponent {
+  constructor(registerOnChange) {
+    this.registerOnChange = registerOnChange
+  }
+
   setPlaceholder() {
     return this
   }
@@ -44,7 +48,8 @@ class TextComponent {
     return this
   }
 
-  onChange() {
+  onChange(callback) {
+    this.registerOnChange(callback)
     return this
   }
 }
@@ -52,6 +57,10 @@ class TextComponent {
 class TextAreaComponent extends TextComponent {}
 
 class DropdownComponent {
+  constructor(registerOnChange) {
+    this.registerOnChange = registerOnChange
+  }
+
   addOption() {
     return this
   }
@@ -60,17 +69,23 @@ class DropdownComponent {
     return this
   }
 
-  onChange() {
+  onChange(callback) {
+    this.registerOnChange(callback)
     return this
   }
 }
 
 class ToggleComponent {
+  constructor(registerOnChange) {
+    this.registerOnChange = registerOnChange
+  }
+
   setValue() {
     return this
   }
 
-  onChange() {
+  onChange(callback) {
+    this.registerOnChange(callback)
     return this
   }
 }
@@ -85,7 +100,8 @@ class ButtonComponent {
     return this
   }
 
-  onClick() {
+  onClick(callback) {
+    this.setting.buttonClickHandlers.push(callback)
     return this
   }
 }
@@ -99,6 +115,11 @@ export class Setting {
       dropdowns: 0,
       toggles: 0,
       buttons: [],
+      textChangeHandlers: [],
+      textAreaChangeHandlers: [],
+      dropdownChangeHandlers: [],
+      toggleChangeHandlers: [],
+      buttonClickHandlers: [],
     }
     containerEl.children.push(this.record)
   }
@@ -115,25 +136,33 @@ export class Setting {
 
   addText(cb) {
     this.record.textInputs += 1
-    cb(new TextComponent())
+    cb(new TextComponent((callback) => {
+      this.record.textChangeHandlers.push(callback)
+    }))
     return this
   }
 
   addTextArea(cb) {
     this.record.textAreas += 1
-    cb(new TextAreaComponent())
+    cb(new TextAreaComponent((callback) => {
+      this.record.textAreaChangeHandlers.push(callback)
+    }))
     return this
   }
 
   addDropdown(cb) {
     this.record.dropdowns += 1
-    cb(new DropdownComponent())
+    cb(new DropdownComponent((callback) => {
+      this.record.dropdownChangeHandlers.push(callback)
+    }))
     return this
   }
 
   addToggle(cb) {
     this.record.toggles += 1
-    cb(new ToggleComponent())
+    cb(new ToggleComponent((callback) => {
+      this.record.toggleChangeHandlers.push(callback)
+    }))
     return this
   }
 

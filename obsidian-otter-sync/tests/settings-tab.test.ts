@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PluginSettingTab, RecordedSetting } from './helpers/obsidian'
 
 import { DEFAULT_DIAGNOSTICS } from '../src/diagnostics'
@@ -9,6 +9,16 @@ import { ensureTestObsidianModule } from './helpers/register-obsidian'
 
 function getRecordedSettings(tab: PluginSettingTab): RecordedSetting[] {
   return tab.containerEl.children as RecordedSetting[]
+}
+
+function getRecordedSetting(tab: PluginSettingTab, name: string): RecordedSetting {
+  const setting = getRecordedSettings(tab).find((item) => item.name === name)
+
+  if (!setting) {
+    throw new Error(`Missing recorded setting: ${name}`)
+  }
+
+  return setting
 }
 
 describe('OtterSync settings tab', () => {
@@ -84,6 +94,55 @@ describe('OtterSync settings tab', () => {
     expect(recordedSettings.find((setting) => setting.name === 'Copy last sync debug info')?.buttons).toContain(
       'Copy debug info',
     )
+  })
+
+  it('persists editable first-run and forced-sync backfill controls', async () => {
+    await ensureTestObsidianModule()
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+    plugin.settings = { ...DEFAULT_SETTINGS }
+    plugin.state = { ...DEFAULT_SYNC_STATE }
+    plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS }
+
+    const { OtterSyncSettingTab } = await import('../src/settings-tab')
+    const tab = new OtterSyncSettingTab(plugin.app as never, plugin)
+
+    tab.display()
+
+    await getRecordedSetting(tab, 'First-run backfill').dropdownChangeHandlers[0]?.('absoluteDate')
+    await getRecordedSetting(tab, 'First-run backfill').textChangeHandlers[0]?.('2026-03-01')
+    await getRecordedSetting(tab, 'Forced sync backfill').dropdownChangeHandlers[0]?.('relativeDays')
+    await getRecordedSetting(tab, 'Forced sync backfill').textChangeHandlers[0]?.('14')
+
+    expect(plugin.settings.firstRunBackfillMode).toBe('absoluteDate')
+    expect(plugin.settings.firstRunBackfillValue).toBe('2026-03-01')
+    expect(plugin.settings.forcedBackfillMode).toBe('relativeDays')
+    expect(plugin.settings.forcedBackfillValue).toBe(14)
+  })
+
+  it('copies the last sync debug info summary', async () => {
+    await ensureTestObsidianModule()
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+    plugin.settings = { ...DEFAULT_SETTINGS, destinationFolder: 'meetings' }
+    plugin.state = { ...DEFAULT_SYNC_STATE, lastFetchWatermark: 99 }
+    plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS, lastErrorSummary: 'sync failed' }
+
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+
+    const { OtterSyncSettingTab } = await import('../src/settings-tab')
+    const tab = new OtterSyncSettingTab(plugin.app as never, plugin)
+
+    tab.display()
+
+    await getRecordedSetting(tab, 'Copy last sync debug info').buttonClickHandlers[0]?.()
+
+    expect(writeText).toHaveBeenCalledTimes(1)
+    expect(writeText.mock.calls[0]?.[0]).toContain('"destinationFolder": "meetings"')
+    expect(writeText.mock.calls[0]?.[0]).toContain('"lastFetchWatermark": 99')
+    expect(writeText.mock.calls[0]?.[0]).toContain('"lastErrorSummary": "sync failed"')
+    vi.unstubAllGlobals()
   })
 
   it('shows a desktop-only process-unavailable message when local execution is unavailable', async () => {

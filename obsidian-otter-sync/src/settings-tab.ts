@@ -1,6 +1,7 @@
 import { PluginSettingTab, Setting } from 'obsidian'
 
 import type OtterSyncPlugin from './main'
+import type { BackfillMode } from './settings'
 
 function formatValue(value: number | string | null): string {
   if (value === null || value === '') {
@@ -28,6 +29,19 @@ function buildDebugInfo(plugin: OtterSyncPlugin): string {
     null,
     2,
   )
+}
+
+function parseBackfillValue(mode: BackfillMode, value: string): number | string {
+  return mode === 'relativeDays' ? Number(value) : value
+}
+
+async function copyDebugInfo(text: string): Promise<void> {
+  const clipboard = (globalThis as { navigator?: { clipboard?: { writeText?: (value: string) => Promise<void> } } })
+    .navigator?.clipboard
+
+  if (clipboard?.writeText) {
+    await clipboard.writeText(text)
+  }
 }
 
 export class OtterSyncSettingTab extends PluginSettingTab {
@@ -78,18 +92,52 @@ export class OtterSyncSettingTab extends PluginSettingTab {
 
     new Setting(this.containerEl)
       .setName('First-run backfill')
+      .addDropdown((component) => {
+        component
+          .addOption('relativeDays', 'Relative days')
+          .addOption('absoluteDate', 'Absolute date')
+          .setValue(this.plugin.settings.firstRunBackfillMode)
+          .onChange(async (value) => {
+            const mode = value as BackfillMode
+            await this.plugin.updateSettings({
+              firstRunBackfillMode: mode,
+              firstRunBackfillValue: parseBackfillValue(mode, String(this.plugin.settings.firstRunBackfillValue)),
+            })
+          })
+      })
       .addText((component) => {
         component
-          .setValue(`${this.plugin.settings.firstRunBackfillMode}:${this.plugin.settings.firstRunBackfillValue}`)
-          .onChange(() => undefined)
+          .setValue(String(this.plugin.settings.firstRunBackfillValue))
+          .onChange(async (value) => {
+            await this.plugin.updateSettings({
+              firstRunBackfillValue: parseBackfillValue(this.plugin.settings.firstRunBackfillMode, value),
+            })
+          })
       })
 
     new Setting(this.containerEl)
       .setName('Forced sync backfill')
+      .addDropdown((component) => {
+        component
+          .addOption('relativeDays', 'Relative days')
+          .addOption('absoluteDate', 'Absolute date')
+          .setValue(this.plugin.settings.forcedBackfillMode)
+          .onChange(async (value) => {
+            const mode = value as BackfillMode
+            await this.plugin.updateSettings({
+              forcedBackfillMode: mode,
+              forcedBackfillValue: parseBackfillValue(mode, String(this.plugin.settings.forcedBackfillValue)),
+            })
+          })
+      })
       .addText((component) => {
         component
-          .setValue(`${this.plugin.settings.forcedBackfillMode}:${this.plugin.settings.forcedBackfillValue}`)
-          .onChange(() => undefined)
+          .setValue(String(this.plugin.settings.forcedBackfillValue))
+          .onChange(async (value) => {
+            await this.plugin.updateSettings({
+              forcedBackfillValue: parseBackfillValue(this.plugin.settings.forcedBackfillMode, value),
+            })
+          })
       })
 
     new Setting(this.containerEl)
@@ -131,8 +179,8 @@ export class OtterSyncSettingTab extends PluginSettingTab {
     new Setting(this.containerEl)
       .setName('Copy last sync debug info')
       .addButton((component) => {
-        component.setButtonText('Copy debug info').onClick(() => {
-          buildDebugInfo(this.plugin)
+        component.setButtonText('Copy debug info').onClick(async () => {
+          await copyDebugInfo(buildDebugInfo(this.plugin))
         })
       })
   }
