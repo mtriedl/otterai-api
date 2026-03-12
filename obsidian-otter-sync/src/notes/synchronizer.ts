@@ -60,6 +60,7 @@ interface ParsedNote {
 const LEGACY_SOURCE_PATTERN = /^https?:\/\/otter\.ai\/u\/([A-Za-z0-9_-]+)$/
 const USER_NOTES_HEADING = /^## User Notes[ \t]*$/gm
 const SECTION_HEADING_PATTERN = /^## (User Notes|Summary|Transcript)[ \t]*$/gm
+const ANY_MARKDOWN_HEADING_PATTERN = /^#{1,6}[ \t]+.*$/gm
 
 function isDestinationFile(path: string, destinationFolder: string): boolean {
   return path === destinationFolder || path.startsWith(`${destinationFolder}/`)
@@ -231,6 +232,14 @@ function collectSectionHeadings(body: string): Array<{ name: string; index: numb
   return headings
 }
 
+function findNextMarkdownHeadingIndex(body: string, startIndex: number): number | null {
+  const pattern = new RegExp(ANY_MARKDOWN_HEADING_PATTERN.source, ANY_MARKDOWN_HEADING_PATTERN.flags)
+  pattern.lastIndex = startIndex
+  const match = pattern.exec(body)
+
+  return match?.index ?? null
+}
+
 function extractUserNotes(body: string): { userNotes: string; normalized: boolean } | null {
   const userNoteMatches = [...body.matchAll(USER_NOTES_HEADING)]
 
@@ -255,8 +264,9 @@ function extractUserNotes(body: string): { userNotes: string; normalized: boolea
     headings[1]?.name === 'Summary' &&
     headings[2]?.name === 'Transcript'
 
-  const nextHeading = headings.find((heading) => heading.index > userHeading.index)
-  const endIndex = nextHeading?.index ?? body.length
+  const nextManagedHeading = headings.find((heading) => heading.index > userHeading.index)
+  const nextMarkdownHeadingIndex = findNextMarkdownHeadingIndex(body, userHeading.end)
+  const endIndex = isCanonical ? (nextManagedHeading?.index ?? body.length) : (nextMarkdownHeadingIndex ?? body.length)
   const rawUserNotes = body.slice(userHeading.end, endIndex)
 
   return {
