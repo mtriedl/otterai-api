@@ -79,27 +79,40 @@ describe('command template helpers', () => {
     })
   })
 
+  it('rejects modes outside the fixed bridge contract', async () => {
+    await expect(
+      runBridgeCommand({
+        commandTemplate: 'python sync.py --since {since} --mode {mode}',
+        since: '1773246700',
+        mode: 'manual sync' as never,
+      }),
+    ).rejects.toMatchObject({
+      name: 'PythonBridgeConfigurationError',
+      message: expect.stringContaining('scheduled'),
+    })
+  })
+
   it('renders safe substituted command output exactly', () => {
     expect(
       renderCommandTemplate(
         'python sync.py --since {since} --mode {mode}',
         {
-          since: '2026-03-11 08:30:00',
-          mode: "man's sync",
+          since: "2026-03-11 08:30:00's",
+          mode: 'manual',
         },
         'darwin',
       ),
-    ).toBe("python sync.py --since '2026-03-11 08:30:00' --mode 'man'\"'\"'s sync'")
+    ).toBe("python sync.py --since '2026-03-11 08:30:00'\"'\"'s' --mode 'manual'")
     expect(
       renderCommandTemplate(
         'python sync.py --since {since} --mode {mode}',
         {
           since: '2026-03-11 08:30:00',
-          mode: 'manual sync',
+          mode: 'manual',
         },
         'win32',
       ),
-    ).toBe('python sync.py --since "2026-03-11 08:30:00" --mode "manual sync"')
+    ).toBe('python sync.py --since "2026-03-11 08:30:00" --mode "manual"')
   })
 
   it('returns the expected shell specification', () => {
@@ -183,6 +196,14 @@ if (scenario === 'ignore-term') {
     setInterval(() => undefined, 1_000)
   })
 }
+
+if (scenario === 'wrapper-child') {
+  await writeFile(fixtureFile, String(process.pid), 'utf8')
+  process.on('SIGTERM', () => undefined)
+  process.stderr.write('wrapper child ignoring sigterm', () => {
+    setInterval(() => undefined, 1_000)
+  })
+}
 `,
       'utf8',
     )
@@ -200,6 +221,10 @@ if (scenario === 'ignore-term') {
 
   function makeExecTemplate(scenario: string, dataPath: string): string {
     return `exec "${process.execPath}" "${harnessPath}" ${scenario} "${dataPath}" {since} {mode}`
+  }
+
+  function makeShellWrapperTemplate(dataPath: string): string {
+    return `"${process.execPath}" "${harnessPath}" wrapper-child "${dataPath}" {since} {mode} & wait`
   }
 
   async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
@@ -296,6 +321,24 @@ if (scenario === 'ignore-term') {
     await expect(
       runBridgeCommand({
         commandTemplate: makeExecTemplate('ignore-term', timeoutPidPath),
+        since: '1773246700',
+        mode: 'manual',
+        timeoutMs: 250,
+      }),
+    ).rejects.toMatchObject({
+      name: 'PythonBridgeTimeoutError',
+      exitCode: null,
+    })
+
+    const pid = Number.parseInt(await readFile(timeoutPidPath, 'utf8'), 10)
+    expect(Number.isInteger(pid)).toBe(true)
+    await expect(waitForProcessExit(pid, 500)).resolves.toBe(true)
+  })
+
+  it('terminates the real bridge process for shell-wrapper commands', async () => {
+    await expect(
+      runBridgeCommand({
+        commandTemplate: makeShellWrapperTemplate(timeoutPidPath),
         since: '1773246700',
         mode: 'manual',
         timeoutMs: 250,

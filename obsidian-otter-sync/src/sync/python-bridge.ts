@@ -10,7 +10,7 @@ export interface ShellSpec {
 export interface RunBridgeCommandOptions {
   commandTemplate: string
   since: string
-  mode: string
+  mode: BridgeMode
   timeoutMs?: number
   platform?: NodeJS.Platform
 }
@@ -29,6 +29,8 @@ export interface CommandDiagnosticsSummary {
   hasModePlaceholder: boolean
   shell: ShellSpec
 }
+
+export type BridgeMode = 'scheduled' | 'manual' | 'forced'
 
 export class PythonBridgeConfigurationError extends Error {
   constructor(message: string) {
@@ -72,6 +74,7 @@ export class PythonBridgeTimeoutError extends PythonBridgeExecutionError {
 const DEFAULT_TIMEOUT_MS = 60_000
 const FORCE_KILL_GRACE_MS = 100
 const QUOTED_PLACEHOLDER_PATTERN = /(['"])\{(since|mode)\}\1/
+const VALID_BRIDGE_MODES = new Set<BridgeMode>(['scheduled', 'manual', 'forced'])
 
 function quoteForPosixShell(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`
@@ -122,10 +125,11 @@ export function validateCommandTemplate(commandTemplate: string): void {
 
 export function renderCommandTemplate(
   commandTemplate: string,
-  values: { since: string; mode: string },
+  values: { since: string; mode: BridgeMode },
   platform: NodeJS.Platform = process.platform,
 ): string {
   validateCommandTemplate(commandTemplate)
+  validateBridgeMode(values.mode)
 
   const quote = platform === 'win32' ? quoteForWindowsShell : quoteForPosixShell
 
@@ -134,8 +138,34 @@ export function renderCommandTemplate(
     .replaceAll('{mode}', quote(values.mode))
 }
 
+export function validateBridgeMode(mode: string): asserts mode is BridgeMode {
+  if (!VALID_BRIDGE_MODES.has(mode as BridgeMode)) {
+    throw new PythonBridgeConfigurationError(
+      'Python bridge mode must be one of: scheduled, manual, forced',
+    )
+  }
+}
+
+function sendSignalToChildProcessTree(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
+  if (child.pid === undefined) {
+    return
+  }
+
+  if (process.platform === 'win32') {
+    child.kill(signal)
+    return
+  }
+
+  try {
+    process.kill(-child.pid, signal)
+  } catch {
+    child.kill(signal)
+  }
+}
+
 export async function runBridgeCommand(options: RunBridgeCommandOptions): Promise<RunBridgeCommandResult> {
   validateCommandTemplate(options.commandTemplate)
+  validateBridgeMode(options.mode)
 
   const platform = options.platform ?? process.platform
   const shell = getShellSpec(platform)
@@ -146,6 +176,7 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
   )
 
   const child = spawn(shell.command, [...shell.args, command], {
+    detached: platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   })
@@ -169,10 +200,10 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
   return await new Promise<RunBridgeCommandResult>((resolve, reject) => {
     const timeout = setTimeout(() => {
       timedOut = true
-      child.kill('SIGTERM')
+      sendSignalToChildProcessTree(child, 'SIGTERM')
       setTimeout(() => {
         if (!exited) {
-          child.kill('SIGKILL')
+          sendSignalToChildProcessTree(child, 'SIGKILL')
         }
       }, FORCE_KILL_GRACE_MS).unref()
     }, timeoutMs)
