@@ -173,6 +173,10 @@ sync_time: 1773246700
 
 Keep only this note body.
 
+# My Heading
+
+Preserve this top-level user heading.
+
 ### Decisions
 
 - Preserve this nested heading.
@@ -195,7 +199,9 @@ Stale managed transcript that must not survive.
 
     expect(result.notes[0]).toMatchObject({ status: 'updated', normalized: true, path: 'Meetings/renamed-sections.md' })
     const content = app.fileContents.get('Meetings/renamed-sections.md')
-    expect(content).toContain('## User Notes\n\nKeep only this note body.\n\n### Decisions\n\n- Preserve this nested heading.\n\n## Summary')
+    expect(content).toContain(
+      '## User Notes\n\nKeep only this note body.\n\n# My Heading\n\nPreserve this top-level user heading.\n\n### Decisions\n\n- Preserve this nested heading.\n\n## Summary',
+    )
     expect(content).toContain('## Summary\n\n- New summary bullet')
     expect(content).toContain('## Transcript\n\nAlice 0:00\nWelcome to the meeting.')
     expect(content).not.toContain('Stale managed summary that must not survive.')
@@ -402,6 +408,9 @@ attendees:
 tags:
   - inbox
 project:
+metadata:
+  owner: Alice
+  topic: Research
 published: true
 archived: false
 reviewed_at: null
@@ -444,6 +453,7 @@ Old transcript
     expect(content).toContain('reviewed_at: null')
     expect(content).toContain('project: null')
     expect(content).not.toContain('project: []')
+    expect(content).toContain('metadata:\n  owner: Alice\n  topic: Research')
     expect(content).toContain('aliases:\n  - alpha\n  - beta gamma')
     expect(content).toContain('score: 7')
     expect(content).toContain('ratio: 3.14')

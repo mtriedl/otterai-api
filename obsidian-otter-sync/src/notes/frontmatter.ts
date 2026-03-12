@@ -11,7 +11,8 @@ export interface ManagedFrontmatter {
 }
 
 export type FrontmatterScalar = string | number | boolean | null
-export type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[]
+export type FrontmatterObject = Record<string, FrontmatterScalar | FrontmatterScalar[]>
+export type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[] | FrontmatterObject
 
 const YAML_SENSITIVE_PATTERN = /(^$)|(^\s)|(\s$)|(:\s)|(^[#\-?]|^[\[\]{}!,&*|>'"%@`])|(\n)/
 const YAML_COERCIBLE_PATTERN = /^(?:true|false|null|~|[-+]?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][-+]?\d+)?)$/i
@@ -69,6 +70,24 @@ function renderFrontmatterValue(value: FrontmatterValue): string[] {
     }
 
     return ['', ...value.map((item) => `  - ${renderYamlString(item)}`)]
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const lines = ['']
+
+    for (const [key, nestedValue] of Object.entries(value)) {
+      const renderedNestedValue = renderFrontmatterValue(nestedValue)
+
+      if (renderedNestedValue.length === 1) {
+        lines.push(`  ${key}: ${renderedNestedValue[0]}`)
+        continue
+      }
+
+      lines.push(`  ${key}:${renderedNestedValue[0]}`)
+      lines.push(...renderedNestedValue.slice(1).map((line) => `  ${line}`))
+    }
+
+    return lines
   }
 
   if (typeof value === 'string') {

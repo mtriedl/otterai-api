@@ -4,7 +4,8 @@ import { buildFilename, cleanseTitle } from './title'
 import type { BridgeSpeech } from '../sync/schema'
 
 type FrontmatterScalar = string | number | boolean | null
-type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[]
+type FrontmatterObject = Record<string, FrontmatterScalar | FrontmatterScalar[]>
+type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[] | FrontmatterObject
 
 interface VaultFileLike {
   path: string
@@ -60,8 +61,7 @@ interface ParsedNote {
 const LEGACY_SOURCE_PATTERN = /^https?:\/\/otter\.ai\/u\/([A-Za-z0-9_-]+)$/
 const USER_NOTES_HEADING = /^## User Notes[ \t]*$/gm
 const SECTION_HEADING_PATTERN = /^## (User Notes|Summary|Transcript)[ \t]*$/gm
-const ANY_MARKDOWN_HEADING_PATTERN = /^#{1,6}[ \t]+.*$/gm
-const TOP_LEVEL_SECTION_HEADING_PATTERN = /^#{1,2}[ \t]+.*$/gm
+const TOP_LEVEL_SECTION_HEADING_PATTERN = /^##[ \t]+.*$/gm
 const YAML_NUMBER_PATTERN = /^[-+]?(?:\d+\.\d+|\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?$/
 
 function isDestinationFile(path: string, destinationFolder: string): boolean {
@@ -153,6 +153,59 @@ function parseScalar(value: string): FrontmatterValue {
   return trimmed
 }
 
+function parseNestedFrontmatterEntries(lines: string[], startIndex: number): { value: FrontmatterObject; nextIndex: number } {
+  const value: FrontmatterObject = {}
+  let index = startIndex
+
+  while (index < lines.length) {
+    const line = lines[index]
+
+    if (!line.startsWith('  ')) {
+      break
+    }
+
+    const nestedLine = line.slice(2)
+    const match = /^([A-Za-z0-9_-]+):(.*)$/.exec(nestedLine)
+
+    if (!match) {
+      break
+    }
+
+    const [, key, remainder] = match
+
+    if (remainder.trim() === '') {
+      if (/^  [A-Za-z0-9_-]+:/.test(lines[index + 1] ?? '')) {
+        const nested = parseNestedFrontmatterEntries(lines, index + 1)
+        value[key] = nested.value
+        index = nested.nextIndex
+        continue
+      }
+
+      const items: FrontmatterScalar[] = []
+      let arrayIndex = index + 1
+
+      while (arrayIndex < lines.length) {
+        const arrayMatch = /^    - (.*)$/.exec(lines[arrayIndex])
+        if (!arrayMatch) {
+          break
+        }
+
+        items.push(parseScalar(arrayMatch[1]) as FrontmatterScalar)
+        arrayIndex += 1
+      }
+
+      value[key] = items.length === 0 ? null : items
+      index = arrayIndex
+      continue
+    }
+
+    value[key] = parseScalar(remainder) as FrontmatterScalar | FrontmatterScalar[]
+    index += 1
+  }
+
+  return { value, nextIndex: index }
+}
+
 function parseFrontmatter(content: string): { frontmatter: Record<string, FrontmatterValue>; body: string } {
   if (!content.startsWith('---\n')) {
     return { frontmatter: {}, body: content }
@@ -180,6 +233,13 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, Frontm
     const [, key, remainder] = match
 
     if (remainder.trim() === '') {
+      if (/^  [A-Za-z0-9_-]+:/.test(lines[index + 1] ?? '')) {
+        const nested = parseNestedFrontmatterEntries(lines, index + 1)
+        frontmatter[key] = nested.value
+        index = nested.nextIndex - 1
+        continue
+      }
+
       const items: FrontmatterScalar[] = []
       let arrayIndex = index + 1
 
@@ -236,14 +296,6 @@ function collectSectionHeadings(body: string): Array<{ name: string; index: numb
   }
 
   return headings
-}
-
-function findNextMarkdownHeadingIndex(body: string, startIndex: number): number | null {
-  const pattern = new RegExp(ANY_MARKDOWN_HEADING_PATTERN.source, ANY_MARKDOWN_HEADING_PATTERN.flags)
-  pattern.lastIndex = startIndex
-  const match = pattern.exec(body)
-
-  return match?.index ?? null
 }
 
 function findNextTopLevelHeadingIndex(body: string, startIndex: number): number | null {
