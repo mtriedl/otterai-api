@@ -173,11 +173,15 @@ sync_time: 1773246700
 
 Keep only this note body.
 
-### Summary
+### Decisions
+
+- Preserve this nested heading.
+
+## Meeting Summary
 
 Stale managed summary that must not survive.
 
-### Transcript
+## Raw Transcript
 
 Stale managed transcript that must not survive.
 `,
@@ -191,7 +195,7 @@ Stale managed transcript that must not survive.
 
     expect(result.notes[0]).toMatchObject({ status: 'updated', normalized: true, path: 'Meetings/renamed-sections.md' })
     const content = app.fileContents.get('Meetings/renamed-sections.md')
-    expect(content).toContain('## User Notes\n\nKeep only this note body.\n\n## Summary')
+    expect(content).toContain('## User Notes\n\nKeep only this note body.\n\n### Decisions\n\n- Preserve this nested heading.\n\n## Summary')
     expect(content).toContain('## Summary\n\n- New summary bullet')
     expect(content).toContain('## Transcript\n\nAlice 0:00\nWelcome to the meeting.')
     expect(content).not.toContain('Stale managed summary that must not survive.')
@@ -405,7 +409,7 @@ score: 7
 ratio: 3.14
 scientific: 6.02e23
 negative_ratio: -0.5
-owner: "123"
+owner: '123'
 source: https://otter.ai/u/old-value
 sync_time: 1773246700
 ---
@@ -443,5 +447,6 @@ Old transcript
     expect(content).toContain('scientific: 6.02e+23')
     expect(content).toContain('negative_ratio: -0.5')
     expect(content).toContain('owner: "123"')
+    expect(content).not.toContain(`owner: "'123'"`)
   })
 })
