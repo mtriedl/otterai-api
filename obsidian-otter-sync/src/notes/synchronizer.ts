@@ -12,13 +12,17 @@ interface VaultFileLike {
   basename: string
 }
 
+interface VaultFolderLike {
+  path: string
+}
+
 interface VaultLike {
   getMarkdownFiles(): VaultFileLike[]
   read(file: VaultFileLike): Promise<string>
   modify(file: VaultFileLike, content: string): Promise<void>
   create(path: string, content: string): Promise<VaultFileLike>
   createFolder(path: string): Promise<unknown>
-  getAbstractFileByPath(path: string): VaultFileLike | { path: string } | null
+  getAbstractFileByPath(path: string): VaultFileLike | VaultFolderLike | null
 }
 
 interface AppLike {
@@ -56,6 +60,10 @@ interface ParsedNote {
   file: VaultFileLike
   frontmatter: Record<string, FrontmatterValue>
   body: string
+}
+
+function isVaultFile(entry: VaultFileLike | VaultFolderLike): entry is VaultFileLike {
+  return 'basename' in entry
 }
 
 const LEGACY_SOURCE_PATTERN = /^https?:\/\/otter\.ai\/u\/([A-Za-z0-9_-]+)$/
@@ -445,7 +453,24 @@ export async function synchronizeNotes({
 }): Promise<SynchronizeNotesResult> {
   const diagnostics: SynchronizerDiagnostic[] = []
 
-  if (app.vault.getAbstractFileByPath(destinationFolder) === null) {
+  const destinationEntry = app.vault.getAbstractFileByPath(destinationFolder)
+
+  if (destinationEntry !== null && isVaultFile(destinationEntry)) {
+    diagnostics.push({
+      code: 'destination-folder-create-failed',
+      message: 'Destination folder path points to a file instead of a folder.',
+      path: destinationFolder,
+      fatal: true,
+    })
+
+    return {
+      notes: [],
+      diagnostics,
+      stopped: true,
+    }
+  }
+
+  if (destinationEntry === null) {
     try {
       await app.vault.createFolder(destinationFolder)
     } catch {

@@ -351,6 +351,25 @@ source: not-an-otter-url
     expect(app.createdFolders).toEqual([])
   })
 
+  it('fails fatally when the destination folder path already exists as a file', async () => {
+    const app = createFakeApp()
+    app.fileContents.set('Meetings', 'not a folder')
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.stopped).toBe(true)
+    expect(result.notes).toEqual([])
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'destination-folder-create-failed', fatal: true, path: 'Meetings' }),
+      ]),
+    )
+  })
+
   it('preserves canonical user notes verbatim during a standard managed update without normalization', async () => {
     const app = createFakeApp()
     app.fileContents.set(
