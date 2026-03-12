@@ -115,6 +115,31 @@ describe('DEFAULT_SETTINGS', () => {
     })
   })
 
+  it('isolates mutable state and diagnostics arrays across fresh loads', async () => {
+    await ensureTestObsidianModule()
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const firstPlugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+    const secondPlugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+
+    vi.spyOn(firstPlugin, 'loadData').mockResolvedValue({})
+    vi.spyOn(secondPlugin, 'loadData').mockResolvedValue({})
+
+    await firstPlugin.loadState()
+    await firstPlugin.loadDiagnostics()
+    await secondPlugin.loadState()
+    await secondPlugin.loadDiagnostics()
+
+    firstPlugin.state.pendingRetries.push({ retry: 1 })
+    firstPlugin.diagnostics.recentRuns.push({ run: 1 })
+
+    expect(firstPlugin.state.pendingRetries).toEqual([{ retry: 1 }])
+    expect(firstPlugin.diagnostics.recentRuns).toEqual([{ run: 1 }])
+    expect(secondPlugin.state.pendingRetries).toEqual([])
+    expect(secondPlugin.diagnostics.recentRuns).toEqual([])
+    expect(DEFAULT_SYNC_STATE.pendingRetries).toEqual([])
+    expect(DEFAULT_DIAGNOSTICS.recentRuns).toEqual([])
+  })
+
   it('restores the obsidian test shim after setup', async () => {
     const packageJsonPath = path.resolve(import.meta.dirname, '../node_modules/obsidian/package.json')
     const entryPath = path.resolve(import.meta.dirname, '../node_modules/obsidian/index.mjs')

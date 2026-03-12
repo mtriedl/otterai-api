@@ -44,6 +44,7 @@ export function mergeState(data?: PersistedPluginData): SyncState {
   return {
     ...DEFAULT_SYNC_STATE,
     ...data?.state,
+    pendingRetries: [...(data?.state?.pendingRetries ?? DEFAULT_SYNC_STATE.pendingRetries)],
   }
 }
 
@@ -51,6 +52,7 @@ export function mergeDiagnostics(data?: PersistedPluginData): DiagnosticsState {
   return {
     ...DEFAULT_DIAGNOSTICS,
     ...data?.diagnostics,
+    recentRuns: [...(data?.diagnostics?.recentRuns ?? DEFAULT_DIAGNOSTICS.recentRuns)],
   }
 }
 
