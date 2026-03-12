@@ -70,7 +70,7 @@ const LEGACY_SOURCE_PATTERN = /^https?:\/\/otter\.ai\/u\/([A-Za-z0-9_-]+)$/
 const USER_NOTES_HEADING = /^## User Notes[ \t]*$/gm
 const SECTION_HEADING_PATTERN = /^## (User Notes|Summary|Transcript)[ \t]*$/gm
 const TOP_LEVEL_SECTION_HEADING_PATTERN = /^##[ \t]+.*$/gm
-const MANAGED_BOUNDARY_HEADING_PATTERN = /^##[ \t]+.*(?:summary|transcript).*$/gim
+const MANAGED_BOUNDARY_HEADING_PATTERN = /^#{2,6}[ \t]+.*(?:summary|transcript).*$/gim
 const YAML_NUMBER_PATTERN = /^[-+]?(?:\d+\.\d+|\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?$/
 
 function isDestinationFile(path: string, destinationFolder: string): boolean {

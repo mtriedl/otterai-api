@@ -153,6 +153,51 @@ two
     expect(content).not.toContain('Broken transcript')
   })
 
+  it('treats misleveled managed headings as malformed managed sections during normalization', async () => {
+    const app = createFakeApp()
+    app.fileContents.set(
+      'Meetings/misleveled-managed.md',
+      `---
+otid: jqb7OHo6mrHtCuMkyLN0nUS8mxY
+date: 2026-03-11
+type: meeting
+attendees:
+  - Legacy Person
+source: https://otter.ai/u/old-value
+sync_time: 1773246700
+---
+
+# Old Title
+
+## User Notes
+
+Keep this note.
+
+### Summary
+
+This stale summary should be removed.
+
+### Transcript
+
+This stale transcript should be removed.
+`,
+    )
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'updated', normalized: true, path: 'Meetings/misleveled-managed.md' })
+    const content = app.fileContents.get('Meetings/misleveled-managed.md')
+    expect(content).toContain('## User Notes\n\nKeep this note.\n\n## Summary')
+    expect(content).toContain('## Summary\n\n- New summary bullet')
+    expect(content).toContain('## Transcript\n\nAlice 0:00\nWelcome to the meeting.')
+    expect(content).not.toContain('This stale summary should be removed.')
+    expect(content).not.toContain('This stale transcript should be removed.')
+  })
+
   it('normalization preserves only user notes when later managed headings are renamed or missing', async () => {
     const app = createFakeApp()
     app.fileContents.set(
