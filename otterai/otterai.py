@@ -106,6 +106,7 @@ class OtterAI:
         source="owned",
         last_load_ts=None,
         modified_after=None,
+        speech_metadata=True,
     ):
         speeches_url = OtterAI.API_BASE_URL + "speeches"
         if self._is_userid_invalid():
@@ -115,12 +116,15 @@ class OtterAI:
         coerced_modified_after = self._coerce_unix_timestamp(
             modified_after, "modified_after"
         )
+        if not isinstance(speech_metadata, bool):
+            raise OtterAIException("speech_metadata must be a bool")
 
         payload = {
             "userid": self._userid,
             "folder": folder,
             "page_size": page_size,
             "source": source,
+            "speech_metadata": str(speech_metadata).lower(),
         }
         if coerced_last_load_ts is not None:
             payload["last_load_ts"] = coerced_last_load_ts

@@ -60,6 +60,23 @@ def _format_duration(seconds: int) -> str:
     return f"{hours}h {remaining}m"
 
 
+def _coerce_optional_timestamp(value):
+    """Parse an optional timestamp field for local filtering."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return float(stripped)
+        except ValueError:
+            return None
+    return None
+
+
 def _resolve_folder_id(client: "OtterAI", folder_ref: str) -> str:
     """Resolve a folder reference to an ID.
 
@@ -213,10 +230,22 @@ def speeches_list(folder, page_size: int, source: str, days: int, as_json: bool)
     speeches_data = data.get("speeches", [])
 
     # Keep client-side filtering as a fallback in case the API ignores modified_after.
+    # Only use modified_time; do not guess from created_at for modified-date filters.
     if days is not None and speeches_data:
         cutoff = time.time() - (days * 86400)
-        speeches_data = [s for s in speeches_data if s.get("created_at", 0) >= cutoff]
-        data["speeches"] = speeches_data
+        filtered_speeches = []
+        used_modified_time = False
+        for speech in speeches_data:
+            modified_time = _coerce_optional_timestamp(speech.get("modified_time"))
+            if modified_time is None:
+                filtered_speeches.append(speech)
+                continue
+            used_modified_time = True
+            if modified_time >= cutoff:
+                filtered_speeches.append(speech)
+        if used_modified_time:
+            speeches_data = filtered_speeches
+            data["speeches"] = speeches_data
 
     if as_json:
         click.echo(json.dumps(data, indent=2))

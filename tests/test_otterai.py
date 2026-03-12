@@ -94,10 +94,36 @@ def test_get_speeches_includes_time_filters_and_timeout():
             "folder": 0,
             "page_size": 45,
             "source": "owned",
+            "speech_metadata": "true",
             "last_load_ts": 1700000000,
             "modified_after": 1700001234,
         },
         timeout=13.0,
+    )
+
+
+def test_get_speeches_supports_disabling_speech_metadata():
+    otter = OtterAI()
+    otter._userid = "user123"
+
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = {}
+    otter._session = MagicMock()
+    otter._session.get.return_value = response
+
+    otter.get_speeches(speech_metadata=False)
+
+    otter._session.get.assert_called_once_with(
+        OtterAI.API_BASE_URL + "speeches",
+        params={
+            "userid": "user123",
+            "folder": 0,
+            "page_size": 45,
+            "source": "owned",
+            "speech_metadata": "false",
+        },
+        timeout=otter._timeout,
     )
 
 
@@ -110,6 +136,14 @@ def test_get_speeches_rejects_invalid_time_filters(field_name, invalid_value):
     kwargs = {field_name: invalid_value}
     with pytest.raises(OtterAIException, match=field_name):
         otter.get_speeches(**kwargs)
+
+
+def test_get_speeches_rejects_invalid_speech_metadata():
+    otter = OtterAI()
+    otter._userid = "user123"
+
+    with pytest.raises(OtterAIException, match="speech_metadata"):
+        otter.get_speeches(speech_metadata="yes")
 
 
 def test_get_speeches_invalid_userid():

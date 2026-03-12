@@ -354,7 +354,7 @@ def test_speeches_list_json_output(runner, temp_config_dir):
 def test_speeches_list_days_uses_server_filter_and_local_fallback(
     runner, temp_config_dir
 ):
-    """The CLI should send modified_after and still filter locally by created_at."""
+    """The CLI should send modified_after and still filter locally by modified_time."""
     config.save_credentials("testuser", "testpass")
 
     mock_client = MagicMock()
@@ -363,8 +363,12 @@ def test_speeches_list_days_uses_server_filter_and_local_fallback(
         "status": 200,
         "data": {
             "speeches": [
-                {"otid": "recent1", "title": "Recent Speech", "created_at": 200000},
-                {"otid": "old1", "title": "Old Speech", "created_at": 100},
+                {
+                    "otid": "recent1",
+                    "title": "Recent Speech",
+                    "modified_time": 200000,
+                },
+                {"otid": "old1", "title": "Old Speech", "modified_time": 100},
             ]
         },
     }
@@ -382,6 +386,33 @@ def test_speeches_list_days_uses_server_filter_and_local_fallback(
         source="owned",
         modified_after=113600,
     )
+
+
+def test_speeches_list_days_does_not_fallback_to_created_at(
+    runner, temp_config_dir
+):
+    """The CLI should not infer modification time from created_at."""
+    config.save_credentials("testuser", "testpass")
+
+    mock_client = MagicMock()
+    mock_client.login.return_value = {"status": 200, "data": {}}
+    mock_client.get_speeches.return_value = {
+        "status": 200,
+        "data": {
+            "speeches": [
+                {"otid": "older1", "title": "Older Speech", "created_at": 100},
+                {"otid": "older2", "title": "Another Older Speech", "created_at": 50},
+            ]
+        },
+    }
+
+    with patch("otterai.cli.OtterAI", return_value=mock_client):
+        with patch("otterai.cli.time.time", return_value=200000):
+            result = runner.invoke(main, ["speeches", "list", "--days", "1"])
+
+    assert result.exit_code == 0
+    assert "Older Speech" in result.output
+    assert "Another Older Speech" in result.output
 
 
 # =============================================================================

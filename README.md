@@ -184,7 +184,7 @@ otter.get_user()
 
 Get all speeches
 
-**optional parameters**: folder, page_size, source, last_load_ts, modified_after
+**optional parameters**: folder, page_size, source, last_load_ts, modified_after, speech_metadata
 
 ```python
 otter.get_speeches()
@@ -195,6 +195,9 @@ Use `last_load_ts` or `modified_after` (Unix timestamps) for incremental fetches
 ```python
 otter.get_speeches(modified_after=1735689600)
 ```
+
+`speech_metadata` defaults to `True`, so response items can include metadata such as
+`modified_time` when the upstream API provides it.
 
 Get speech by id
 
