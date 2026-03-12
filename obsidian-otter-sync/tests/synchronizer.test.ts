@@ -605,4 +605,68 @@ Old transcript
     expect(content).toContain('owner: "123"')
     expect(content).not.toContain(`owner: "'123'"`)
   })
+
+  it('preserves nested unknown frontmatter maps and lists during managed updates', async () => {
+    const app = createFakeApp()
+    app.fileContents.set(
+      'Meetings/nested-frontmatter.md',
+      `---
+otid: jqb7OHo6mrHtCuMkyLN0nUS8mxY
+date: 2026-03-11
+type: meeting
+attendees:
+  - Legacy Person
+meta:
+  owner:
+    name: Alice
+    roles:
+      - reviewer
+      - approver
+  flags:
+    pinned: true
+    archived: false
+  history:
+    - kind: created
+      at: 2026-03-10
+    - kind: reviewed
+      at: 2026-03-11
+links:
+  related:
+    - alpha
+    - beta
+source: https://otter.ai/u/old-value
+sync_time: 1773246700
+---
+
+# Old Title
+
+## User Notes
+
+Keep these notes.
+
+## Summary
+
+Old summary
+
+## Transcript
+
+Old transcript
+`,
+    )
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech({ summary_markdown: 'Fresh summary' })],
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'updated', path: 'Meetings/nested-frontmatter.md' })
+    const content = app.fileContents.get('Meetings/nested-frontmatter.md')
+    expect(content).toContain('meta:\n  owner:\n    name: Alice\n    roles:\n      - reviewer\n      - approver')
+    expect(content).toContain('flags:\n    pinned: true\n    archived: false')
+    expect(content).toContain('history:\n    - kind: created\n      at: 2026-03-10\n    - kind: reviewed\n      at: 2026-03-11')
+    expect(content).toContain('links:\n  related:\n    - alpha\n    - beta')
+    expect(content).toContain('source: https://otter.ai/u/4ypoVqo4Z4ZUagOc-VfM7mugJIA')
+    expect(content).toContain('sync_time: 1773246769')
+  })
 })

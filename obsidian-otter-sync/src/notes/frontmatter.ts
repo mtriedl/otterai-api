@@ -1,4 +1,5 @@
 import type { BridgeSpeech } from '../sync/schema'
+import { parse, stringify } from 'yaml'
 import { formatSpeechDate } from './title'
 
 export interface ManagedFrontmatter {
@@ -10,19 +11,11 @@ export interface ManagedFrontmatter {
   sync_time: number
 }
 
-export type FrontmatterScalar = string | number | boolean | null
-export type FrontmatterObject = Record<string, FrontmatterScalar | FrontmatterScalar[]>
-export type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[] | FrontmatterObject
+export type FrontmatterValue = unknown
 
-const YAML_SENSITIVE_PATTERN = /(^$)|(^\s)|(\s$)|(:\s)|(^[#\-?]|^[\[\]{}!,&*|>'"%@`])|(\n)/
-const YAML_COERCIBLE_PATTERN = /^(?:true|false|null|~|[-+]?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][-+]?\d+)?)$/i
-
-function quoteYamlString(value: string): string {
-  return JSON.stringify(value)
-}
-
-function renderYamlString(value: string): string {
-  return YAML_SENSITIVE_PATTERN.test(value) || YAML_COERCIBLE_PATTERN.test(value) ? quoteYamlString(value) : value
+interface ParsedFrontmatter {
+  frontmatter: Record<string, FrontmatterValue>
+  body: string
 }
 
 export function normalizeAttendees(attendees: string[]): string[] {
@@ -63,64 +56,42 @@ export function mergeManagedFrontmatter(
   }
 }
 
-function renderFrontmatterValue(value: FrontmatterValue): string[] {
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return ['[]']
+function isFrontmatterRecord(value: unknown): value is Record<string, FrontmatterValue> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+export function parseFrontmatter(content: string): ParsedFrontmatter {
+  if (!content.startsWith('---\n')) {
+    return { frontmatter: {}, body: content }
+  }
+
+  const closingIndex = content.indexOf('\n---\n', 4)
+
+  if (closingIndex === -1) {
+    return { frontmatter: {}, body: content }
+  }
+
+  const rawFrontmatter = content.slice(4, closingIndex)
+  const body = content.slice(closingIndex + 5)
+
+  try {
+    const parsed = parse(rawFrontmatter)
+
+    if (!isFrontmatterRecord(parsed)) {
+      return { frontmatter: {}, body }
     }
 
-    return ['', ...value.map((item) => `  - ${renderYamlString(item)}`)]
+    return { frontmatter: parsed, body }
+  } catch {
+    return { frontmatter: {}, body: content }
   }
-
-  if (typeof value === 'object' && value !== null) {
-    const lines = ['']
-
-    for (const [key, nestedValue] of Object.entries(value)) {
-      const renderedNestedValue = renderFrontmatterValue(nestedValue)
-
-      if (renderedNestedValue.length === 1) {
-        lines.push(`  ${key}: ${renderedNestedValue[0]}`)
-        continue
-      }
-
-      lines.push(`  ${key}:${renderedNestedValue[0]}`)
-      lines.push(...renderedNestedValue.slice(1).map((line) => `  ${line}`))
-    }
-
-    return lines
-  }
-
-  if (typeof value === 'string') {
-    return [renderYamlString(value)]
-  }
-
-  if (typeof value === 'boolean') {
-    return [String(value)]
-  }
-
-  if (value === null) {
-    return ['null']
-  }
-
-  return [String(value)]
 }
 
 export function renderFrontmatter(frontmatter: Record<string, FrontmatterValue>): string {
-  const lines = ['---']
+  const rendered = stringify(frontmatter, {
+    lineWidth: 0,
+    defaultStringType: 'PLAIN',
+  }).trimEnd()
 
-  for (const [key, value] of Object.entries(frontmatter)) {
-    const renderedValue = renderFrontmatterValue(value)
-
-    if (renderedValue.length === 1) {
-      lines.push(`${key}: ${renderedValue[0]}`)
-      continue
-    }
-
-    lines.push(`${key}:${renderedValue[0]}`)
-    lines.push(...renderedValue.slice(1))
-  }
-
-  lines.push('---')
-
-  return lines.join('\n')
+  return rendered === '' ? '---\n---' : `---\n${rendered}\n---`
 }
