@@ -4,6 +4,7 @@ import { DEFAULT_DIAGNOSTICS } from '../src/diagnostics'
 import { DEFAULT_SETTINGS } from '../src/settings'
 import { DEFAULT_SYNC_STATE } from '../src/state'
 import { createFakeApp, createFakeManifest } from './helpers/fake-app'
+import { ensureTestObsidianModule } from './helpers/register-obsidian'
 
 describe('DEFAULT_SETTINGS', () => {
   it('defines the initial plugin settings', () => {
@@ -20,6 +21,7 @@ describe('DEFAULT_SETTINGS', () => {
   })
 
   it('loads settings state and diagnostics from the plugin data envelope', async () => {
+    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     vi.spyOn(plugin, 'loadData').mockResolvedValue({
@@ -55,6 +57,7 @@ describe('DEFAULT_SETTINGS', () => {
   })
 
   it('keeps settings defaults when plugin data is missing or partial', async () => {
+    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     vi.spyOn(plugin, 'loadData').mockResolvedValue({
@@ -77,6 +80,7 @@ describe('DEFAULT_SETTINGS', () => {
   })
 
   it('persists settings updates through the explicit data envelope', async () => {
+    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     plugin.settings = { ...DEFAULT_SETTINGS }

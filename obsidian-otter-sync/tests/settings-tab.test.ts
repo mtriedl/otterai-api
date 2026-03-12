@@ -5,6 +5,7 @@ import { DEFAULT_DIAGNOSTICS } from '../src/diagnostics'
 import { DEFAULT_SETTINGS } from '../src/settings'
 import { DEFAULT_SYNC_STATE } from '../src/state'
 import { createFakeApp, createFakeManifest } from './helpers/fake-app'
+import { ensureTestObsidianModule } from './helpers/register-obsidian'
 
 function getRecordedSettings(tab: PluginSettingTab): RecordedSetting[] {
   return tab.containerEl.children as RecordedSetting[]
@@ -15,6 +16,7 @@ describe('OtterSync settings tab', () => {
   })
 
   it('renders all Task 2 settings and diagnostics fields', async () => {
+    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     plugin.settings = { ...DEFAULT_SETTINGS }
@@ -50,6 +52,7 @@ describe('OtterSync settings tab', () => {
   })
 
   it('renders diagnostics as read-only state and diagnostics fields', async () => {
+    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     plugin.settings = { ...DEFAULT_SETTINGS, destinationFolder: 'notes' }
@@ -84,6 +87,7 @@ describe('OtterSync settings tab', () => {
   })
 
   it('shows a desktop-only process-unavailable message when local execution is unavailable', async () => {
+    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(
       createFakeApp({ isDesktopOnly: false, processExecutionAvailable: false }),
