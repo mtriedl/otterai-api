@@ -56,15 +56,19 @@ interface ParsedNote {
 }
 
 const LEGACY_SOURCE_PATTERN = /^https?:\/\/otter\.ai\/u\/([A-Za-z0-9_-]+)$/
-const USER_NOTES_HEADING = /^## User Notes\s*$/gm
-const SECTION_HEADING_PATTERN = /^## (User Notes|Summary|Transcript)\s*$/gm
+const USER_NOTES_HEADING = /^## User Notes[ \t]*$/gm
+const SECTION_HEADING_PATTERN = /^## (User Notes|Summary|Transcript)[ \t]*$/gm
 
 function isDestinationFile(path: string, destinationFolder: string): boolean {
   return path === destinationFolder || path.startsWith(`${destinationFolder}/`)
 }
 
-function parseScalar(value: string): string | number {
+function parseScalar(value: string): FrontmatterValue {
   const trimmed = value.trim()
+
+  if (trimmed === '[]') {
+    return []
+  }
 
   if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
     return JSON.parse(trimmed)
@@ -162,10 +166,6 @@ function collectSectionHeadings(body: string): Array<{ name: string; index: numb
   return headings
 }
 
-function normalizeSectionContent(content: string): string {
-  return content.replace(/^\n+/, '').replace(/\n+$/, '')
-}
-
 function extractUserNotes(body: string): { userNotes: string; normalized: boolean } | null {
   const userNoteMatches = [...body.matchAll(USER_NOTES_HEADING)]
 
@@ -195,7 +195,7 @@ function extractUserNotes(body: string): { userNotes: string; normalized: boolea
   const rawUserNotes = body.slice(userHeading.end, endIndex)
 
   return {
-    userNotes: normalizeSectionContent(rawUserNotes),
+    userNotes: rawUserNotes,
     normalized: !isCanonical,
   }
 }
@@ -212,11 +212,7 @@ function buildUpdatedNoteContent(
 
 # ${cleanseTitle(speech.title)}
 
-## User Notes
-
-${userNotes}
-
-## Summary
+## User Notes${userNotes}## Summary
 
 ${renderSummary(speech.summary_markdown)}
 

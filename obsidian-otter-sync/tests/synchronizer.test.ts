@@ -273,7 +273,38 @@ source: not-an-otter-url
 
   it('preserves canonical user notes verbatim during a standard managed update without normalization', async () => {
     const app = createFakeApp()
-    app.fileContents.set('Meetings/standard.md', await readFixture('existing-note.md'))
+    app.fileContents.set(
+      'Meetings/standard.md',
+      `---
+otid: jqb7OHo6mrHtCuMkyLN0nUS8mxY
+date: 2026-03-11
+type: meeting
+attendees:
+  - Legacy Person
+tags: []
+source: https://otter.ai/u/old-value
+sync_time: 1773246700
+---
+
+# Old Title
+
+## User Notes
+
+
+Keep this paragraph exactly.
+
+And keep this trailing gap.
+
+
+## Summary
+
+Old summary
+
+## Transcript
+
+Old transcript
+`,
+    )
 
     const result = await synchronizeNotes({
       app,
@@ -283,7 +314,8 @@ source: not-an-otter-url
 
     expect(result.notes[0]).toMatchObject({ status: 'updated', normalized: false })
     const content = app.fileContents.get('Meetings/standard.md')
-    expect(content).toContain('## User Notes\n\nKeep this paragraph exactly.')
+    expect(content).toContain('## User Notes\n\n\nKeep this paragraph exactly.\n\nAnd keep this trailing gap.\n\n\n## Summary')
+    expect(content).toContain('tags: []')
     expect(content).toContain('## Summary\n\nFresh summary')
   })
 })
