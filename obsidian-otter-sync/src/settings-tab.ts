@@ -1,7 +1,7 @@
 import { PluginSettingTab, Setting } from 'obsidian'
 
 import type OtterSyncPlugin from './main'
-import type { BackfillMode } from './settings'
+import { DEFAULT_SETTINGS, type BackfillMode } from './settings'
 
 function formatValue(value: number | string | null): string {
   if (value === null || value === '') {
@@ -36,8 +36,23 @@ function buildDebugInfo(plugin: OtterSyncPlugin): string {
   )
 }
 
-function parseBackfillValue(mode: BackfillMode, value: string): number | string {
-  return mode === 'relativeDays' ? Number(value) : value
+function parseRelativeDays(value: string): number | null {
+  const trimmedValue = value.trim()
+
+  if (!/^\d+$/.test(trimmedValue)) {
+    return null
+  }
+
+  return Number(trimmedValue)
+}
+
+function parseBackfillValue(mode: BackfillMode, value: string): number | string | null {
+  return mode === 'relativeDays' ? parseRelativeDays(value) : value
+}
+
+function resolveBackfillValue(mode: BackfillMode, value: string, fallback: number): number | string {
+  const parsedValue = parseBackfillValue(mode, value)
+  return parsedValue === null ? fallback : parsedValue
 }
 
 async function copyDebugInfo(text: string): Promise<void> {
@@ -106,7 +121,11 @@ export class OtterSyncSettingTab extends PluginSettingTab {
             const mode = value as BackfillMode
             await this.plugin.updateSettings({
               firstRunBackfillMode: mode,
-              firstRunBackfillValue: parseBackfillValue(mode, String(this.plugin.settings.firstRunBackfillValue)),
+              firstRunBackfillValue: resolveBackfillValue(
+                mode,
+                String(this.plugin.settings.firstRunBackfillValue),
+                DEFAULT_SETTINGS.firstRunBackfillValue as number,
+              ),
             })
           })
       })
@@ -114,8 +133,14 @@ export class OtterSyncSettingTab extends PluginSettingTab {
         component
           .setValue(String(this.plugin.settings.firstRunBackfillValue))
           .onChange(async (value) => {
+            const parsedValue = parseBackfillValue(this.plugin.settings.firstRunBackfillMode, value)
+
+            if (parsedValue === null) {
+              return
+            }
+
             await this.plugin.updateSettings({
-              firstRunBackfillValue: parseBackfillValue(this.plugin.settings.firstRunBackfillMode, value),
+              firstRunBackfillValue: parsedValue,
             })
           })
       })
@@ -131,7 +156,11 @@ export class OtterSyncSettingTab extends PluginSettingTab {
             const mode = value as BackfillMode
             await this.plugin.updateSettings({
               forcedBackfillMode: mode,
-              forcedBackfillValue: parseBackfillValue(mode, String(this.plugin.settings.forcedBackfillValue)),
+              forcedBackfillValue: resolveBackfillValue(
+                mode,
+                String(this.plugin.settings.forcedBackfillValue),
+                DEFAULT_SETTINGS.forcedBackfillValue as number,
+              ),
             })
           })
       })
@@ -139,8 +168,14 @@ export class OtterSyncSettingTab extends PluginSettingTab {
         component
           .setValue(String(this.plugin.settings.forcedBackfillValue))
           .onChange(async (value) => {
+            const parsedValue = parseBackfillValue(this.plugin.settings.forcedBackfillMode, value)
+
+            if (parsedValue === null) {
+              return
+            }
+
             await this.plugin.updateSettings({
-              forcedBackfillValue: parseBackfillValue(this.plugin.settings.forcedBackfillMode, value),
+              forcedBackfillValue: parsedValue,
             })
           })
       })

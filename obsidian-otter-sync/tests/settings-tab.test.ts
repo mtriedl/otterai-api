@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PluginSettingTab, RecordedSetting } from './helpers/obsidian'
 
 import { DEFAULT_DIAGNOSTICS } from '../src/diagnostics'
 import { DEFAULT_SETTINGS } from '../src/settings'
 import { DEFAULT_SYNC_STATE } from '../src/state'
 import { createFakeApp, createFakeManifest } from './helpers/fake-app'
-import { ensureTestObsidianModule } from './helpers/register-obsidian'
+import { ensureTestObsidianModule, restoreTestObsidianModule } from './helpers/register-obsidian'
 
 function getRecordedSettings(tab: PluginSettingTab): RecordedSetting[] {
   return tab.containerEl.children as RecordedSetting[]
@@ -22,11 +22,17 @@ function getRecordedSetting(tab: PluginSettingTab, name: string): RecordedSettin
 }
 
 describe('OtterSync settings tab', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules()
+    await ensureTestObsidianModule()
+  })
+
+  afterEach(async () => {
+    vi.unstubAllGlobals()
+    await restoreTestObsidianModule()
   })
 
   it('renders all Task 2 settings and diagnostics fields', async () => {
-    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     plugin.settings = { ...DEFAULT_SETTINGS }
@@ -62,7 +68,6 @@ describe('OtterSync settings tab', () => {
   })
 
   it('renders diagnostics as read-only state and diagnostics fields', async () => {
-    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     plugin.settings = { ...DEFAULT_SETTINGS, destinationFolder: 'notes' }
@@ -97,7 +102,6 @@ describe('OtterSync settings tab', () => {
   })
 
   it('persists editable first-run and forced-sync backfill controls', async () => {
-    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     plugin.settings = { ...DEFAULT_SETTINGS }
@@ -120,8 +124,28 @@ describe('OtterSync settings tab', () => {
     expect(plugin.settings.forcedBackfillValue).toBe(14)
   })
 
+  it('ignores invalid relative-day backfill values', async () => {
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+    plugin.settings = {
+      ...DEFAULT_SETTINGS,
+      firstRunBackfillMode: 'relativeDays',
+      firstRunBackfillValue: 7,
+    }
+    plugin.state = { ...DEFAULT_SYNC_STATE }
+    plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS }
+
+    const { OtterSyncSettingTab } = await import('../src/settings-tab')
+    const tab = new OtterSyncSettingTab(plugin.app as never, plugin)
+
+    tab.display()
+
+    await getRecordedSetting(tab, 'First-run backfill').textChangeHandlers[0]?.('not-a-number')
+
+    expect(plugin.settings.firstRunBackfillValue).toBe(7)
+  })
+
   it('copies the last sync debug info summary', async () => {
-    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     plugin.settings = {
@@ -149,11 +173,9 @@ describe('OtterSync settings tab', () => {
     expect(writeText.mock.calls[0]?.[0]).not.toContain('super-secret')
     expect(writeText.mock.calls[0]?.[0]).toContain('"lastFetchWatermark": 99')
     expect(writeText.mock.calls[0]?.[0]).toContain('"lastErrorSummary": "sync failed"')
-    vi.unstubAllGlobals()
   })
 
   it('shows a desktop-only process-unavailable message when local execution is unavailable', async () => {
-    await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(
       createFakeApp({ isDesktopOnly: false, processExecutionAvailable: false }),

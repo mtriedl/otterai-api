@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
+import { access, readFile } from 'node:fs/promises'
+import path from 'node:path'
 
 import { DEFAULT_DIAGNOSTICS } from '../src/diagnostics'
 import { DEFAULT_SETTINGS } from '../src/settings'
 import { DEFAULT_SYNC_STATE } from '../src/state'
 import { createFakeApp, createFakeManifest } from './helpers/fake-app'
-import { ensureTestObsidianModule } from './helpers/register-obsidian'
+import { ensureTestObsidianModule, restoreTestObsidianModule } from './helpers/register-obsidian'
 
 describe('DEFAULT_SETTINGS', () => {
   it('defines the initial plugin settings', () => {
@@ -111,5 +113,23 @@ describe('DEFAULT_SETTINGS', () => {
         lastErrorSummary: 'still here',
       },
     })
+  })
+
+  it('restores the obsidian test shim after setup', async () => {
+    const packageJsonPath = path.resolve(import.meta.dirname, '../node_modules/obsidian/package.json')
+    const entryPath = path.resolve(import.meta.dirname, '../node_modules/obsidian/index.mjs')
+    const originalPackageJson = await readFile(packageJsonPath, 'utf8')
+    const originalEntry = await readFile(entryPath, 'utf8').catch(() => null)
+
+    await ensureTestObsidianModule()
+    await restoreTestObsidianModule()
+
+    expect(await readFile(packageJsonPath, 'utf8')).toBe(originalPackageJson)
+
+    if (originalEntry === null) {
+      await expect(access(entryPath)).rejects.toThrow()
+    } else {
+      expect(await readFile(entryPath, 'utf8')).toBe(originalEntry)
+    }
   })
 })
