@@ -62,6 +62,7 @@ const LEGACY_SOURCE_PATTERN = /^https?:\/\/otter\.ai\/u\/([A-Za-z0-9_-]+)$/
 const USER_NOTES_HEADING = /^## User Notes[ \t]*$/gm
 const SECTION_HEADING_PATTERN = /^## (User Notes|Summary|Transcript)[ \t]*$/gm
 const TOP_LEVEL_SECTION_HEADING_PATTERN = /^##[ \t]+.*$/gm
+const MANAGED_BOUNDARY_HEADING_PATTERN = /^##[ \t]+.*(?:summary|transcript).*$/gim
 const YAML_NUMBER_PATTERN = /^[-+]?(?:\d+\.\d+|\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?$/
 
 function isDestinationFile(path: string, destinationFolder: string): boolean {
@@ -306,6 +307,14 @@ function findNextTopLevelHeadingIndex(body: string, startIndex: number): number 
   return match?.index ?? null
 }
 
+function findNextManagedBoundaryIndex(body: string, startIndex: number): number | null {
+  const pattern = new RegExp(MANAGED_BOUNDARY_HEADING_PATTERN.source, MANAGED_BOUNDARY_HEADING_PATTERN.flags)
+  pattern.lastIndex = startIndex
+  const match = pattern.exec(body)
+
+  return match?.index ?? null
+}
+
 function extractUserNotes(body: string): { userNotes: string; normalized: boolean } | null {
   const userNoteMatches = [...body.matchAll(USER_NOTES_HEADING)]
 
@@ -331,8 +340,11 @@ function extractUserNotes(body: string): { userNotes: string; normalized: boolea
     headings[2]?.name === 'Transcript'
 
   const nextManagedHeading = headings.find((heading) => heading.index > userHeading.index)
+  const nextManagedBoundaryIndex = findNextManagedBoundaryIndex(body, userHeading.end)
   const nextTopLevelHeadingIndex = findNextTopLevelHeadingIndex(body, userHeading.end)
-  const endIndex = isCanonical ? (nextManagedHeading?.index ?? body.length) : (nextTopLevelHeadingIndex ?? body.length)
+  const endIndex = isCanonical
+    ? (nextManagedHeading?.index ?? body.length)
+    : (nextManagedBoundaryIndex ?? nextTopLevelHeadingIndex ?? body.length)
   const rawUserNotes = body.slice(userHeading.end, endIndex)
 
   return {

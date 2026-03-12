@@ -177,6 +177,10 @@ Keep only this note body.
 
 Preserve this top-level user heading.
 
+## Decisions
+
+Preserve this H2 user heading too.
+
 ### Decisions
 
 - Preserve this nested heading.
@@ -200,7 +204,7 @@ Stale managed transcript that must not survive.
     expect(result.notes[0]).toMatchObject({ status: 'updated', normalized: true, path: 'Meetings/renamed-sections.md' })
     const content = app.fileContents.get('Meetings/renamed-sections.md')
     expect(content).toContain(
-      '## User Notes\n\nKeep only this note body.\n\n# My Heading\n\nPreserve this top-level user heading.\n\n### Decisions\n\n- Preserve this nested heading.\n\n## Summary',
+      '## User Notes\n\nKeep only this note body.\n\n# My Heading\n\nPreserve this top-level user heading.\n\n## Decisions\n\nPreserve this H2 user heading too.\n\n### Decisions\n\n- Preserve this nested heading.\n\n## Summary',
     )
     expect(content).toContain('## Summary\n\n- New summary bullet')
     expect(content).toContain('## Transcript\n\nAlice 0:00\nWelcome to the meeting.')
