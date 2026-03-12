@@ -61,6 +61,7 @@ const LEGACY_SOURCE_PATTERN = /^https?:\/\/otter\.ai\/u\/([A-Za-z0-9_-]+)$/
 const USER_NOTES_HEADING = /^## User Notes[ \t]*$/gm
 const SECTION_HEADING_PATTERN = /^## (User Notes|Summary|Transcript)[ \t]*$/gm
 const ANY_MARKDOWN_HEADING_PATTERN = /^#{1,6}[ \t]+.*$/gm
+const YAML_NUMBER_PATTERN = /^[-+]?(?:\d+\.\d+|\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?$/
 
 function isDestinationFile(path: string, destinationFolder: string): boolean {
   return path === destinationFolder || path.startsWith(`${destinationFolder}/`)
@@ -140,7 +141,7 @@ function parseScalar(value: string): FrontmatterValue {
     return null
   }
 
-  if (/^-?\d+$/.test(trimmed)) {
+  if (YAML_NUMBER_PATTERN.test(trimmed)) {
     return Number(trimmed)
   }
 

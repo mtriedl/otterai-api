@@ -402,6 +402,9 @@ archived: false
 reviewed_at: null
 aliases: [alpha, "beta gamma"]
 score: 7
+ratio: 3.14
+scientific: 6.02e23
+negative_ratio: -0.5
 owner: "123"
 source: https://otter.ai/u/old-value
 sync_time: 1773246700
@@ -436,6 +439,9 @@ Old transcript
     expect(content).toContain('reviewed_at: null')
     expect(content).toContain('aliases:\n  - alpha\n  - beta gamma')
     expect(content).toContain('score: 7')
+    expect(content).toContain('ratio: 3.14')
+    expect(content).toContain('scientific: 6.02e+23')
+    expect(content).toContain('negative_ratio: -0.5')
     expect(content).toContain('owner: "123"')
   })
 })
