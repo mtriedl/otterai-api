@@ -180,14 +180,23 @@ async function loadDestinationNotes(
   destinationFolder: string,
 ): Promise<{ notes: ParsedNote[]; diagnostics: SynchronizerDiagnostic[] }> {
   const files = app.vault.getMarkdownFiles().filter((file) => isDestinationFile(file.path, destinationFolder))
-  const notes = await Promise.all(
+  const diagnostics: SynchronizerDiagnostic[] = []
+  const loadedNotes = await Promise.all(
     files.map(async (file) => {
-      const content = await app.vault.read(file)
-      return parseNote(file, content)
+      try {
+        const content = await app.vault.read(file)
+        return parseNote(file, content)
+      } catch (error) {
+        diagnostics.push({
+          code: 'vault-operation-failed',
+          message: toErrorMessage(error),
+          path: file.path,
+        })
+        return null
+      }
     }),
   )
-
-  const diagnostics: SynchronizerDiagnostic[] = []
+  const notes = loadedNotes.filter((note): note is ParsedNote => note !== null)
 
   for (const note of notes) {
     if (typeof note.frontmatter.otid === 'string') {

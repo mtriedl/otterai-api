@@ -524,6 +524,37 @@ source: not-an-otter-url
     ])
   })
 
+  it('records unreadable destination notes during preload without aborting the batch', async () => {
+    const app = createFakeApp()
+    app.fileContents.set('Meetings/unreadable.md', await readFixture('existing-note.md'))
+    app.failReadFor.add('Meetings/unreadable.md')
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.stopped).toBe(false)
+    expect(result.notes).toEqual([
+      expect.objectContaining({
+        otid: 'jqb7OHo6mrHtCuMkyLN0nUS8mxY',
+        status: 'created',
+        path: 'Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md',
+        diagnostics: [],
+      }),
+    ])
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'vault-operation-failed',
+          path: 'Meetings/unreadable.md',
+          message: 'Failed to read file: Meetings/unreadable.md',
+        }),
+      ]),
+    )
+  })
+
   it('skips notes that are not newer than sync_time and updates managed content when they are newer', async () => {
     const app = createFakeApp()
     const existing = await readFixture('existing-note.md')
