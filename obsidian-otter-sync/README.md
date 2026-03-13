@@ -32,8 +32,8 @@ The Python bridge contract is split across stdout and a payload file:
 - The plugin keeps payload files on bridge parse, validation, load, and note-processing failures for debugging
 - If `Delete payload files after successful sync` is enabled, the plugin deletes the payload file only after a successful sync
 
-See `docs/examples/obsidian-otter-sync-command.md` for the command template contract and failure expectations.
-See `docs/superpowers/manual-verification/obsidian-otter-sync.md` for the manual verification checklist.
+See `../docs/examples/obsidian-otter-sync-command.md` for the command template contract and failure expectations.
+See `../docs/superpowers/manual-verification/obsidian-otter-sync.md` for the manual verification checklist.
 
 ## Scripts
 
