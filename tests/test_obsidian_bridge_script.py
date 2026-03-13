@@ -1,4 +1,5 @@
 import json
+import logging
 import importlib.util
 import subprocess
 import sys
@@ -98,6 +99,52 @@ def test_cli_writes_payload_and_prints_stdout_envelope(tmp_path, monkeypatch, ca
 
     written_payload = json.loads(payload_path.read_text())
     assert written_payload == payload
+
+
+def test_cli_keeps_existing_payload_when_atomic_rename_fails(tmp_path, monkeypatch):
+    bridge = load_bridge_module()
+    output_dir = tmp_path / "bridge-output"
+    output_dir.mkdir(parents=True)
+    payload_path = output_dir / "payload.json"
+    payload_path.write_text('{"fetched_until": 1, "speeches": []}')
+
+    payload = {
+        "fetched_until": 1710003601,
+        "speeches": [
+            {
+                "otid": "otter-123",
+                "source_url": "https://otter.ai/u/example",
+                "title": "Weekly Sync",
+                "created_at": 1710000001,
+                "modified_time": 1710001801,
+                "attendees": ["Ada"],
+                "summary_markdown": "",
+                "transcript_segments": [],
+            }
+        ],
+    }
+
+    monkeypatch.setattr(
+        bridge,
+        "parse_args",
+        lambda: SimpleNamespace(
+            since=1710000001, mode="manual", output_dir=str(output_dir)
+        ),
+    )
+    monkeypatch.setattr(bridge, "build_payload", lambda since: payload)
+
+    def fake_replace(source, destination):
+        raise OSError("rename failed")
+
+    monkeypatch.setattr(bridge.Path, "replace", fake_replace)
+
+    try:
+        bridge.main()
+        assert False, "expected main to fail when atomic rename fails"
+    except OSError as exc:
+        assert str(exc) == "rename failed"
+
+    assert json.loads(payload_path.read_text()) == {"fetched_until": 1, "speeches": []}
 
 
 def test_build_payload_fetches_incremental_speeches(monkeypatch):
@@ -316,8 +363,8 @@ def test_build_payload_fetches_all_incremental_pages(monkeypatch):
     ]
 
 
-def test_build_payload_skips_speech_when_detail_fetch_raises_and_logs_error(
-    monkeypatch, capsys
+def test_build_payload_logs_and_skips_per_speech_failures_without_stdout_pollution(
+    monkeypatch, caplog, capsys
 ):
     bridge = load_bridge_module()
     mock_client = MagicMock()
@@ -325,56 +372,15 @@ def test_build_payload_skips_speech_when_detail_fetch_raises_and_logs_error(
         "status": 200,
         "data": {
             "speeches": [
-                {"otid": "otter-bad", "title": "Bad Speech"},
+                {"otid": "otter-fetch-bad", "title": "Bad Fetch Speech"},
+                {"otid": "otter-normalize-bad", "title": "Bad Normalize Speech"},
                 {"otid": "otter-good", "title": "Good Speech"},
             ]
         },
     }
     mock_client.get_speech.side_effect = [
         RuntimeError("detail exploded"),
-        {
-            "status": 200,
-            "data": {
-                "speech": {
-                    "otid": "otter-good",
-                    "title": "Good Speech",
-                    "created_at": 1710000003,
-                    "modified_time": 1710000004,
-                    "summary": [],
-                    "transcripts": [],
-                }
-            },
-        },
-    ]
-
-    monkeypatch.setattr(
-        bridge, "get_authenticated_client", lambda: mock_client, raising=False
-    )
-
-    payload = bridge.build_payload(1710000001)
-
-    assert [speech["otid"] for speech in payload["speeches"]] == ["otter-good"]
-    captured = capsys.readouterr()
-    assert "Skipping speech otter-bad" in captured.err
-    assert "detail exploded" in captured.err
-
-
-def test_build_payload_skips_speech_when_normalization_raises_and_logs_error(
-    monkeypatch, capsys
-):
-    bridge = load_bridge_module()
-    mock_client = MagicMock()
-    mock_client.get_speeches.return_value = {
-        "status": 200,
-        "data": {
-            "speeches": [
-                {"otid": "otter-bad", "title": "Bad Speech"},
-                {"otid": "otter-good", "title": "Good Speech"},
-            ]
-        },
-    }
-    mock_client.get_speech.side_effect = [
-        {"status": 200, "data": {"speech": {"otid": "otter-bad"}}},
+        {"status": 200, "data": {"speech": {"otid": "otter-normalize-bad"}}},
         {
             "status": 200,
             "data": {
@@ -391,7 +397,7 @@ def test_build_payload_skips_speech_when_normalization_raises_and_logs_error(
     ]
 
     def fake_normalize(summary_speech, detail_speech):
-        if detail_speech.get("otid") == "otter-bad":
+        if detail_speech.get("otid") == "otter-normalize-bad":
             raise ValueError("bad detail shape")
         return {
             "otid": summary_speech["otid"],
@@ -409,12 +415,17 @@ def test_build_payload_skips_speech_when_normalization_raises_and_logs_error(
     )
     monkeypatch.setattr(bridge, "normalize_speech", fake_normalize)
 
-    payload = bridge.build_payload(1710000001)
+    with caplog.at_level(logging.WARNING):
+        payload = bridge.build_payload(1710000001)
 
     assert [speech["otid"] for speech in payload["speeches"]] == ["otter-good"]
     captured = capsys.readouterr()
-    assert "Skipping speech otter-bad" in captured.err
-    assert "bad detail shape" in captured.err
+    assert captured.out == ""
+    assert captured.err == ""
+    assert caplog.messages == [
+        "Skipping speech otter-fetch-bad: detail exploded",
+        "Skipping speech otter-normalize-bad: bad detail shape",
+    ]
 
 
 def test_build_payload_converts_structured_summary_content_to_markdown(monkeypatch):
@@ -472,7 +483,7 @@ def test_build_payload_converts_structured_summary_content_to_markdown(monkeypat
 
 
 def test_build_payload_filters_out_speeches_older_than_since_after_fetch(
-    monkeypatch, capsys
+    monkeypatch, caplog, capsys
 ):
     bridge = load_bridge_module()
     mock_client = MagicMock()
@@ -518,9 +529,13 @@ def test_build_payload_filters_out_speeches_older_than_since_after_fetch(
         bridge, "get_authenticated_client", lambda: mock_client, raising=False
     )
 
-    payload = bridge.build_payload(1710000001)
+    with caplog.at_level(logging.WARNING):
+        payload = bridge.build_payload(1710000001)
 
     assert [speech["otid"] for speech in payload["speeches"]] == ["otter-new"]
     captured = capsys.readouterr()
-    assert "Skipping speech otter-old" in captured.err
-    assert "modified_time 1709999999 is older than since 1710000001" in captured.err
+    assert captured.out == ""
+    assert captured.err == ""
+    assert caplog.messages == [
+        "Skipping speech otter-old: modified_time 1709999999 is older than since 1710000001"
+    ]

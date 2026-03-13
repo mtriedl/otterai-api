@@ -1,6 +1,8 @@
 import argparse
 import json
+import logging
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -9,6 +11,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from otterai.cli import get_authenticated_client
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _coerce_int(value, default=0):
@@ -115,7 +120,23 @@ def _normalize_segment_text(transcript):
 
 
 def _log_skip(otid, reason):
-    print(f"Skipping speech {otid}: {reason}", file=sys.stderr)
+    LOGGER.warning("Skipping speech %s: %s", otid, reason)
+
+
+def _write_payload_atomically(payload_path, payload):
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=payload_path.parent, delete=False
+        ) as temp_file:
+            json.dump(payload, temp_file)
+            temp_path = Path(temp_file.name)
+
+        temp_path.replace(payload_path)
+    except Exception:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
+        raise
 
 
 def _fetch_incremental_speeches(client, since):
@@ -270,7 +291,7 @@ def main():
 
     payload_path = output_dir / "payload.json"
     payload = build_payload(args.since)
-    payload_path.write_text(json.dumps(payload))
+    _write_payload_atomically(payload_path, payload)
 
     envelope = {
         "payload_path": str(payload_path),
