@@ -77,6 +77,24 @@ function normalizeDestinationFolderPath(destinationFolder: string): string {
     .join('/')
 }
 
+async function ensureDestinationFolderExists(app: AppLike, destinationFolder: string): Promise<void> {
+  const segments = destinationFolder.split('/').filter((segment) => segment.length > 0)
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const folderPath = segments.slice(0, index + 1).join('/')
+    const entry = app.vault.getAbstractFileByPath(folderPath)
+
+    if (entry === null) {
+      await app.vault.createFolder(folderPath)
+      continue
+    }
+
+    if (isVaultFile(entry)) {
+      throw new Error(`Destination folder path points to a file: ${folderPath}`)
+    }
+  }
+}
+
 function isDestinationFile(path: string, destinationFolder: string): boolean {
   return path === destinationFolder || path.startsWith(`${destinationFolder}/`)
 }
@@ -304,7 +322,7 @@ export async function synchronizeNotes({
 
   if (destinationEntry === null) {
     try {
-      await app.vault.createFolder(normalizedDestinationFolder)
+      await ensureDestinationFolderExists(app, normalizedDestinationFolder)
     } catch {
       diagnostics.push({
         code: 'destination-folder-create-failed',

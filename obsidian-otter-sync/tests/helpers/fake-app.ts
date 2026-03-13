@@ -51,6 +51,16 @@ export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp & App {
     return { path, basename }
   }
 
+  const getParentFolder = (targetPath: string): string | null => {
+    const segments = targetPath.split('/').filter((segment) => segment.length > 0)
+
+    if (segments.length <= 1) {
+      return null
+    }
+
+    return segments.slice(0, -1).join('/')
+  }
+
   return {
     isDesktopOnly: true,
     processExecutionAvailable: true,
@@ -96,6 +106,12 @@ export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp & App {
       async createFolder(path: string): Promise<FakeFolder> {
         if (failCreateFolderFor.has(path)) {
           throw new Error(`Failed to create folder: ${path}`)
+        }
+
+        const parentFolder = getParentFolder(path)
+
+        if (parentFolder !== null && !existingFolders.has(parentFolder)) {
+          throw new Error(`Parent folder does not exist: ${parentFolder}`)
         }
 
         existingFolders.add(path)

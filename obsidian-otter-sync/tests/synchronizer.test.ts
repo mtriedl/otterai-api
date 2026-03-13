@@ -120,6 +120,25 @@ describe('synchronizeNotes', () => {
     expect(app.workspace.getFileByPath('Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md')).not.toBeNull()
   })
 
+  it('creates nested destination folders parent by parent before writing notes', async () => {
+    const app = createFakeApp()
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings/Otter',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.stopped).toBe(false)
+    expect(result.notes[0]).toMatchObject({
+      status: 'created',
+      path: 'Meetings/Otter/2026-03-11 - Quarterly Planning Review Kickoff.md',
+      normalized: false,
+    })
+    expect(app.createdFolders).toEqual(['Meetings', 'Meetings/Otter'])
+    expect(app.workspace.getFileByPath('Meetings/Otter/2026-03-11 - Quarterly Planning Review Kickoff.md')).not.toBeNull()
+  })
+
   it('scans only the configured destination folder for matches and duplicates', async () => {
     const app = createFakeApp()
     app.fileContents.set('Archive/2026-03-11 - Quarterly Planning Review Kickoff.md', await readFixture('existing-note.md'))
