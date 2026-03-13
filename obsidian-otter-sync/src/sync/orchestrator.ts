@@ -268,15 +268,44 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         dependencies.notify('Writing meeting notes...')
       }
 
-      const noteResult = await dependencies.synchronizeNotes({
-        app: plugin.app,
-        destinationFolder: plugin.settings.destinationFolder,
-        speeches: mergedSpeeches,
-      })
-      const counts = buildCounts(noteResult.notes)
       const speechesByOtid = new Map(mergedSpeeches.map((speech) => [speech.otid, speech]))
-      const noteFailures = buildNoteFailures(noteResult.notes, speechesByOtid)
       const attemptedAt = new Date(dependencies.now()).toISOString()
+      let noteResult: SynchronizeNotesResult
+
+      try {
+        noteResult = await dependencies.synchronizeNotes({
+          app: plugin.app,
+          destinationFolder: plugin.settings.destinationFolder,
+          speeches: mergedSpeeches,
+        })
+      } catch (error) {
+        let pendingRetries = plugin.state.pendingRetries
+        const noteSyncError = error as Error & { stderr?: string; exitCode?: number | null }
+
+        for (const speech of mergedSpeeches) {
+          pendingRetries = replaceRetryEntry(pendingRetries, toRetryEntry(speech, noteSyncError.message, attemptedAt))
+        }
+
+        await plugin.updateState({ pendingRetries })
+        await failRun(
+          mode,
+          startedAtIso,
+          fetchWatermarkUsed,
+          commandSummary,
+          buildErrorWithMetadata(noteSyncError.message, {
+            stderr: noteSyncError.stderr ?? bridgeResult.stderr,
+            exitCode: noteSyncError.exitCode ?? bridgeResult.exitCode,
+          }),
+          { created: 0, updated: 0, skipped: 0, failed: 0 },
+          [],
+          bridgeResult.payload.fetched_until,
+          hadPendingRetries,
+          bridgeResult.payload.speeches.length,
+        )
+      }
+
+      const counts = buildCounts(noteResult.notes)
+      const noteFailures = buildNoteFailures(noteResult.notes, speechesByOtid)
 
       let pendingRetries = plugin.state.pendingRetries
       for (const note of noteResult.notes) {

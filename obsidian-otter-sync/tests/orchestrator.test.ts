@@ -331,6 +331,51 @@ describe('sync orchestrator', () => {
     ])
   })
 
+  it('records diagnostics and preserves retries when synchronizeNotes throws after a successful fetch', async () => {
+    const notices: string[] = []
+    const plugin = makePlugin()
+    const orchestrator = createSyncOrchestrator(plugin, {
+      now: () => 1_800_000_000_000,
+      notify: (message) => {
+        notices.push(message)
+      },
+      runBridgeCommand: vi.fn().mockResolvedValue({
+        payload: buildPayload({
+          fetched_until: 1_710_000_999,
+          speeches: [
+            buildSpeech({ otid: 'speech-1', modified_time: 200, title: 'Fetched speech one' }),
+            buildSpeech({ otid: 'speech-2', modified_time: 300, title: 'Fetched speech two', source_url: 'https://otter.ai/u/speech-2' }),
+          ],
+        }),
+        stdout: '{}',
+        stderr: '',
+        exitCode: 0,
+      }),
+      synchronizeNotes: vi.fn().mockRejectedValue(new Error('Vault crashed during note sync')),
+    })
+
+    await expect(orchestrator.runSync('manual')).rejects.toThrow('Vault crashed during note sync')
+
+    expect(plugin.state.lastFetchWatermark).toBe(1_710_000_999)
+    expect(plugin.state.pendingRetries).toEqual([
+      expect.objectContaining({ otid: 'speech-1', modified_time: 200, title: 'Fetched speech one', failure_reason: 'Vault crashed during note sync' }),
+      expect.objectContaining({ otid: 'speech-2', modified_time: 300, title: 'Fetched speech two', failure_reason: 'Vault crashed during note sync' }),
+    ])
+    expect(plugin.diagnostics.recentRuns[0]).toMatchObject({
+      fetchedUntil: 1_710_000_999,
+      counts: { created: 0, updated: 0, skipped: 0, failed: 0 },
+      errorSummary: 'Vault crashed during note sync',
+      noteFailures: [],
+      speechCount: 2,
+    })
+    expect(notices).toEqual([
+      'Sync started.',
+      'Fetching Otter meetings...',
+      'Writing meeting notes...',
+      'Sync failed: 0 created, 0 updated, 0 skipped, 0 failed. Vault crashed during note sync',
+    ])
+  })
+
   it('rejects overlapping runs and releases the lock after completion and failure', async () => {
     let resolveNotes: ((value: { notes: never[]; diagnostics: never[]; stopped: false }) => void) | undefined
     const plugin = makePlugin()
