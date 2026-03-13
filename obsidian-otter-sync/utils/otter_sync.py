@@ -73,6 +73,13 @@ def _normalize_attendees(summary_speech, detail_speech):
 def _normalize_summary_markdown(summary_value):
     if isinstance(summary_value, str):
         return summary_value.strip()
+    if isinstance(summary_value, dict):
+        sections = []
+        for key, heading in (("outline", "Outline"), ("action_items", "Action Items")):
+            section_markdown = _normalize_summary_markdown(summary_value.get(key))
+            if section_markdown:
+                sections.append(f"## {heading}\n{section_markdown}")
+        return "\n\n".join(sections)
     if not isinstance(summary_value, list):
         return ""
 
@@ -229,9 +236,19 @@ def build_payload(since, fetched_until=None):
 
         detail_speech = detail_result.get("data", {}).get("speech", {})
         try:
-            normalized_speeches.append(normalize_speech(summary_speech, detail_speech))
+            normalized_speech = normalize_speech(summary_speech, detail_speech)
         except Exception as exc:
             _log_skip(otid, exc)
+            continue
+
+        if normalized_speech.get("modified_time", 0) < since:
+            _log_skip(
+                otid,
+                f"modified_time {normalized_speech.get('modified_time')} is older than since {since}",
+            )
+            continue
+
+        normalized_speeches.append(normalized_speech)
 
     return {"fetched_until": fetched_until, "speeches": normalized_speeches}
 

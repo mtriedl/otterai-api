@@ -415,3 +415,112 @@ def test_build_payload_skips_speech_when_normalization_raises_and_logs_error(
     captured = capsys.readouterr()
     assert "Skipping speech otter-bad" in captured.err
     assert "bad detail shape" in captured.err
+
+
+def test_build_payload_converts_structured_summary_content_to_markdown(monkeypatch):
+    bridge = load_bridge_module()
+    mock_client = MagicMock()
+    mock_client.get_speeches.return_value = {
+        "status": 200,
+        "data": {
+            "speeches": [
+                {
+                    "otid": "otter-structured",
+                    "title": "Structured Summary",
+                    "created_at": 1710000001,
+                    "modified_time": 1710001801,
+                }
+            ]
+        },
+    }
+    mock_client.get_speech.return_value = {
+        "status": 200,
+        "data": {
+            "speech": {
+                "otid": "otter-structured",
+                "created_at": 1710000001,
+                "modified_time": 1710001801,
+                "summary": {
+                    "outline": [
+                        {"text": "Reviewed roadmap"},
+                        {"text": "Confirmed launch plan"},
+                    ],
+                    "action_items": [
+                        {"text": "Ada to publish notes"},
+                        {"text": "Linus to confirm owners"},
+                    ],
+                },
+                "transcripts": [],
+            }
+        },
+    }
+
+    monkeypatch.setattr(
+        bridge, "get_authenticated_client", lambda: mock_client, raising=False
+    )
+
+    payload = bridge.build_payload(1710000001)
+
+    assert payload["speeches"][0]["summary_markdown"] == (
+        "## Outline\n"
+        "- Reviewed roadmap\n"
+        "- Confirmed launch plan\n\n"
+        "## Action Items\n"
+        "- Ada to publish notes\n"
+        "- Linus to confirm owners"
+    )
+
+
+def test_build_payload_filters_out_speeches_older_than_since_after_fetch(
+    monkeypatch, capsys
+):
+    bridge = load_bridge_module()
+    mock_client = MagicMock()
+    mock_client.get_speeches.return_value = {
+        "status": 200,
+        "data": {
+            "speeches": [
+                {"otid": "otter-old", "title": "Old Speech"},
+                {"otid": "otter-new", "title": "New Speech"},
+            ]
+        },
+    }
+    mock_client.get_speech.side_effect = [
+        {
+            "status": 200,
+            "data": {
+                "speech": {
+                    "otid": "otter-old",
+                    "title": "Old Speech",
+                    "created_at": 1710000001,
+                    "modified_time": 1709999999,
+                    "summary": [],
+                    "transcripts": [],
+                }
+            },
+        },
+        {
+            "status": 200,
+            "data": {
+                "speech": {
+                    "otid": "otter-new",
+                    "title": "New Speech",
+                    "created_at": 1710000002,
+                    "modified_time": 1710000001,
+                    "summary": [],
+                    "transcripts": [],
+                }
+            },
+        },
+    ]
+
+    monkeypatch.setattr(
+        bridge, "get_authenticated_client", lambda: mock_client, raising=False
+    )
+
+    payload = bridge.build_payload(1710000001)
+
+    assert [speech["otid"] for speech in payload["speeches"]] == ["otter-new"]
+    captured = capsys.readouterr()
+    assert "Skipping speech otter-old" in captured.err
+    assert "modified_time 1709999999 is older than since 1710000001" in captured.err
