@@ -300,6 +300,37 @@ describe('sync orchestrator', () => {
     })
   })
 
+  it('queues fetched speeches for retry when note processing stops fatally before per-note failures', async () => {
+    const plugin = makePlugin()
+    const orchestrator = createSyncOrchestrator(plugin, {
+      now: () => 1_800_000_000_000,
+      notify: () => undefined,
+      runBridgeCommand: vi.fn().mockResolvedValue({
+        payload: buildPayload({
+          speeches: [
+            buildSpeech({ otid: 'speech-1', modified_time: 200, title: 'Fetched speech one' }),
+            buildSpeech({ otid: 'speech-2', modified_time: 300, title: 'Fetched speech two', source_url: 'https://otter.ai/u/speech-2' }),
+          ],
+        }),
+        stdout: '{}',
+        stderr: '',
+        exitCode: 0,
+      }),
+      synchronizeNotes: vi.fn().mockResolvedValue({
+        notes: [],
+        diagnostics: [{ code: 'destination-folder-create-failed', message: 'Failed before note writes.', fatal: true }],
+        stopped: true,
+      }),
+    })
+
+    await expect(orchestrator.runSync('manual')).rejects.toThrow('Failed before note writes.')
+
+    expect(plugin.state.pendingRetries).toEqual([
+      expect.objectContaining({ otid: 'speech-1', modified_time: 200, title: 'Fetched speech one', failure_reason: 'Failed before note writes.' }),
+      expect.objectContaining({ otid: 'speech-2', modified_time: 300, title: 'Fetched speech two', failure_reason: 'Failed before note writes.' }),
+    ])
+  })
+
   it('rejects overlapping runs and releases the lock after completion and failure', async () => {
     let resolveNotes: ((value: { notes: never[]; diagnostics: never[]; stopped: false }) => void) | undefined
     const plugin = makePlugin()
@@ -491,7 +522,7 @@ describe('sync orchestrator', () => {
 })
 
 describe('plugin integration', () => {
-  it('registers sync commands on load and starts then clears interval scheduling', async () => {
+  it('registers sync commands on load, runs an immediate scheduled sync, and starts then clears interval scheduling', async () => {
     await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest()) as OtterSyncPlugin & {
@@ -502,6 +533,11 @@ describe('plugin integration', () => {
     vi.spyOn(plugin, 'loadSettings').mockResolvedValue(plugin.settings)
     vi.spyOn(plugin, 'loadState').mockResolvedValue(plugin.state)
     vi.spyOn(plugin, 'loadDiagnostics').mockResolvedValue(plugin.diagnostics)
+    const runSyncSpy = vi.spyOn((plugin as unknown as { orchestrator: { runSync: (mode: string) => Promise<unknown> } }).orchestrator, 'runSync').mockResolvedValue({
+      status: 'success',
+      counts: { created: 0, updated: 0, skipped: 0, failed: 0 },
+      fetchedUntil: 1,
+    })
 
     const intervalHandle = { id: 1 } as unknown as ReturnType<typeof setInterval>
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval').mockReturnValue(intervalHandle)
@@ -509,6 +545,7 @@ describe('plugin integration', () => {
 
     await plugin.onload()
 
+    expect(runSyncSpy).toHaveBeenCalledWith('scheduled')
     expect(plugin.addCommand).toHaveBeenCalledTimes(2)
     expect(plugin.addCommand).toHaveBeenCalledWith(expect.objectContaining({ id: 'sync-now', name: 'Sync now' }))
     expect(plugin.addCommand).toHaveBeenCalledWith(expect.objectContaining({ id: 'force-sync-now', name: 'Force sync now' }))

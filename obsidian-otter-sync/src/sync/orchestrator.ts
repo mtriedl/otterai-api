@@ -291,6 +291,14 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         pendingRetries = markRetrySuccess(pendingRetries, note.otid)
       }
 
+      if (noteResult.stopped && noteFailures.length === 0) {
+        const fatalReason = noteResult.diagnostics[0]?.message ?? 'Note synchronization failed'
+
+        for (const speech of mergedSpeeches) {
+          pendingRetries = replaceRetryEntry(pendingRetries, toRetryEntry(speech, fatalReason, attemptedAt))
+        }
+      }
+
       await plugin.updateState({ pendingRetries })
 
       const endedAtIso = new Date(dependencies.now()).toISOString()

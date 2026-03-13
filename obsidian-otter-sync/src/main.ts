@@ -29,6 +29,7 @@ export default class OtterSyncPlugin extends Plugin {
     this.addSettingTab(new OtterSyncSettingTab(this.app, this))
     this.orchestrator.registerCommands()
     this.orchestrator.startScheduling()
+    void this.orchestrator.runSync('scheduled').catch(() => undefined)
   }
 
   async onunload(): Promise<void> {
