@@ -1,9 +1,10 @@
 import { PluginSettingTab, Setting } from 'obsidian'
 
+import type { RunRecord } from './diagnostics'
 import type OtterSyncPlugin from './main'
 import { DEFAULT_SETTINGS, type BackfillMode } from './settings'
 
-function formatValue(value: number | string | null): string {
+function formatValue(value: string | null): string {
   if (value === null || value === '') {
     return 'Not available yet'
   }
@@ -11,12 +12,64 @@ function formatValue(value: number | string | null): string {
   return String(value)
 }
 
-function formatRecentDiagnostics(recentRuns: unknown[]): string {
+function formatIsoTimestamp(value: number | null, multiplier = 1): string {
+  if (value === null) {
+    return 'Not available yet'
+  }
+
+  const date = new Date(value * multiplier)
+
+  if (Number.isNaN(date.valueOf())) {
+    return String(value)
+  }
+
+  return date.toISOString()
+}
+
+function formatFetchWatermark(value: number | null): string {
+  if (value === null) {
+    return 'Not available yet'
+  }
+
+  const isoTimestamp = formatIsoTimestamp(value, 1000)
+  return isoTimestamp === String(value) ? String(value) : `${value} (${isoTimestamp} UTC)`
+}
+
+function formatRecentDiagnostics(recentRuns: RunRecord[]): string {
   if (recentRuns.length === 0) {
     return 'No sync diagnostics recorded yet.'
   }
 
-  return JSON.stringify(recentRuns, null, 2)
+  return recentRuns
+    .map((run) => {
+      if (!('runMode' in run) || !('startedAt' in run) || !('counts' in run)) {
+        return JSON.stringify(run, null, 2)
+      }
+
+      const lines = [
+        `${run.runMode[0].toUpperCase()}${run.runMode.slice(1)} run at ${run.startedAt}`,
+        `Completed: ${run.endedAt}`,
+        `Counts: ${run.counts.created} created, ${run.counts.updated} updated, ${run.counts.skipped} skipped, ${run.counts.failed} failed`,
+        `Speech count: ${run.speechCount}`,
+        `Fetch watermark used: ${run.fetchWatermarkUsed ?? 'Not available yet'}`,
+        `Fetched until: ${run.fetchedUntil ?? 'Not available yet'}`,
+      ]
+
+      if (run.errorSummary) {
+        lines.push(`Error summary: ${run.errorSummary}`)
+      }
+
+      if (run.stderrSnippet) {
+        lines.push(`stderr: ${run.stderrSnippet}`)
+      }
+
+      for (const failure of run.noteFailures) {
+        lines.push(`Note failure: ${failure.otid} -> ${failure.reason}`)
+      }
+
+      return lines.join('\n')
+    })
+    .join('\n\n')
 }
 
 function buildDebugInfo(plugin: OtterSyncPlugin): string {
@@ -220,14 +273,14 @@ export class OtterSyncSettingTab extends PluginSettingTab {
     new Setting(this.containerEl)
       .setName('Last clean sync time')
       .addText((component) => {
-        component.setValue(formatValue(this.plugin.state.lastCleanSyncTime)).onChange(() => undefined)
+        component.setValue(formatIsoTimestamp(this.plugin.state.lastCleanSyncTime)).onChange(() => undefined)
       })
       .setDisabled(true)
 
     new Setting(this.containerEl)
       .setName('Last fetch watermark')
       .addText((component) => {
-        component.setValue(formatValue(this.plugin.state.lastFetchWatermark)).onChange(() => undefined)
+        component.setValue(formatFetchWatermark(this.plugin.state.lastFetchWatermark)).onChange(() => undefined)
       })
       .setDisabled(true)
 
@@ -247,6 +300,7 @@ export class OtterSyncSettingTab extends PluginSettingTab {
 
     new Setting(this.containerEl)
       .setName('Copy last sync debug info')
+      .setDesc('Copies settings, state, and diagnostics with the command template redacted.')
       .addButton((component) => {
         component.setButtonText('Copy debug info').onClick(async () => {
           await copyDebugInfo(buildDebugInfo(this.plugin))

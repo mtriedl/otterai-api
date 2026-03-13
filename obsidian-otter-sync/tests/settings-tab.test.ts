@@ -67,19 +67,56 @@ describe('OtterSync settings tab', () => {
     ])
   })
 
-  it('renders diagnostics as read-only state and diagnostics fields', async () => {
+  it('renders diagnostics with readable summaries and debug copy guidance', async () => {
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     plugin.settings = { ...DEFAULT_SETTINGS, destinationFolder: 'notes' }
     plugin.state = {
       ...DEFAULT_SYNC_STATE,
-      lastCleanSyncTime: 42,
-      lastFetchWatermark: 84,
+      lastCleanSyncTime: 1710000000000,
+      lastFetchWatermark: 1710000001,
     }
     plugin.diagnostics = {
       ...DEFAULT_DIAGNOSTICS,
       lastErrorSummary: 'Only from diagnostics',
-      recentRuns: [{ attempt: 1 }],
+      recentRuns: [
+        {
+          runMode: 'forced',
+          startedAt: '2026-03-10T12:00:00.000Z',
+          endedAt: '2026-03-10T12:00:03.000Z',
+          fetchWatermarkUsed: 1710000001,
+          fetchedUntil: 1710003601,
+          retryReplay: false,
+          counts: {
+            created: 2,
+            updated: 1,
+            skipped: 0,
+            failed: 1,
+          },
+          commandSummary: {
+            configured: true,
+            hasQuotedPlaceholders: false,
+            hasSincePlaceholder: true,
+            hasModePlaceholder: true,
+            shell: {
+              command: '/bin/sh',
+              args: ['-lc'],
+            },
+          },
+          exitCode: 0,
+          stderrSnippet: null,
+          speechCount: 4,
+          errorSummary: 'One note failed',
+          noteFailures: [
+            {
+              otid: 'otter-1',
+              source_url: 'https://otter.ai/u/example',
+              notePath: 'Meetings/Example.md',
+              reason: 'Vault write failed',
+            },
+          ],
+        },
+      ],
     }
 
     const { OtterSyncSettingTab } = await import('../src/settings-tab')
@@ -91,14 +128,24 @@ describe('OtterSync settings tab', () => {
       ...DEFAULT_SETTINGS,
       destinationFolder: 'notes',
     })
-    const recordedSettings = getRecordedSettings(tab)
-    expect(recordedSettings.find((setting) => setting.name === 'Last clean sync time')?.textInputs).toBe(1)
-    expect(recordedSettings.find((setting) => setting.name === 'Last fetch watermark')?.textInputs).toBe(1)
-    expect(recordedSettings.find((setting) => setting.name === 'Last sync error summary')?.textAreas).toBe(1)
-    expect(recordedSettings.find((setting) => setting.name === 'Recent sync diagnostics')?.textAreas).toBe(1)
-    expect(recordedSettings.find((setting) => setting.name === 'Copy last sync debug info')?.buttons).toContain(
-      'Copy debug info',
+    expect(getRecordedSetting(tab, 'Last clean sync time').textValues[0]).toBe('2024-03-09T16:00:00.000Z')
+    expect(getRecordedSetting(tab, 'Last fetch watermark').textValues[0]).toBe(
+      '1710000001 (2024-03-09T16:00:01.000Z UTC)',
     )
+    expect(getRecordedSetting(tab, 'Last sync error summary').textAreaValues[0]).toBe('Only from diagnostics')
+    expect(getRecordedSetting(tab, 'Recent sync diagnostics').textAreaValues[0]).toContain(
+      'Forced run at 2026-03-10T12:00:00.000Z',
+    )
+    expect(getRecordedSetting(tab, 'Recent sync diagnostics').textAreaValues[0]).toContain(
+      'Counts: 2 created, 1 updated, 0 skipped, 1 failed',
+    )
+    expect(getRecordedSetting(tab, 'Recent sync diagnostics').textAreaValues[0]).toContain(
+      'Note failure: otter-1 -> Vault write failed',
+    )
+    expect(getRecordedSetting(tab, 'Copy last sync debug info').desc).toContain(
+      'Copies settings, state, and diagnostics with the command template redacted.',
+    )
+    expect(getRecordedSetting(tab, 'Copy last sync debug info').buttons).toContain('Copy debug info')
   })
 
   it('persists editable first-run and forced-sync backfill controls', async () => {
