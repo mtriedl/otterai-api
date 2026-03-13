@@ -148,11 +148,13 @@ describe('runBridgeCommand', () => {
   let tempDir = ''
   let harnessPath = ''
   let timeoutPidPath = ''
+  let shellWrapperPidPath = ''
 
   beforeAll(async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), 'python-bridge-test-'))
     harnessPath = path.join(tempDir, 'bridge-harness.mjs')
     timeoutPidPath = path.join(tempDir, 'timeout.pid')
+    shellWrapperPidPath = path.join(tempDir, 'shell-wrapper.pid')
 
     await writeFile(
       harnessPath,
@@ -228,8 +230,8 @@ if (scenario === 'wrapper-child') {
     return `exec "${process.execPath}" "${harnessPath}" ${scenario} "${dataPath}" {since} {mode}`
   }
 
-  function makeShellWrapperTemplate(dataPath: string): string {
-    return `"${process.execPath}" "${harnessPath}" wrapper-child "${dataPath}" {since} {mode} & wait`
+  function makeShellWrapperTemplate(dataPath: string, childPidPath: string): string {
+    return `"${process.execPath}" "${harnessPath}" wrapper-child "${dataPath}" {since} {mode} & printf '%s' "$!" > "${childPidPath}"; wait`
   }
 
   async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
@@ -251,6 +253,28 @@ if (scenario === 'wrapper-child') {
     }
 
     return false
+  }
+
+  async function waitForPidFile(filePath: string, timeoutMs: number): Promise<number> {
+    const deadline = Date.now() + timeoutMs
+
+    while (Date.now() < deadline) {
+      try {
+        const pid = Number((await readFile(filePath, 'utf8')).trim())
+        if (Number.isInteger(pid) && pid > 0) {
+          return pid
+        }
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code !== 'ENOENT') {
+          throw error
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+
+    throw new Error(`Timed out waiting for pid file at ${filePath}`)
   }
 
   async function expectTimeoutError(options: Parameters<typeof runBridgeCommand>[0]): Promise<BridgeExecutionError> {
@@ -351,13 +375,16 @@ if (scenario === 'wrapper-child') {
 
   it('terminates the real bridge process for shell-wrapper commands', async () => {
     const error = await expectTimeoutError({
-      commandTemplate: makeShellWrapperTemplate(timeoutPidPath),
+      commandTemplate: makeShellWrapperTemplate(timeoutPidPath, shellWrapperPidPath),
       since: '1773246700',
       mode: 'manual',
       timeoutMs: 250,
     })
 
-    await expect(waitForProcessExit(error.childPid as number, 500)).resolves.toBe(true)
+    const bridgePid = await waitForPidFile(shellWrapperPidPath, 500)
+
+    expect(bridgePid).not.toBe(error.childPid)
+    await expect(waitForProcessExit(bridgePid, 500)).resolves.toBe(true)
   })
 
   it('treats command-template validation failures as configuration errors', async () => {
