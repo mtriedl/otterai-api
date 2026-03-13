@@ -407,6 +407,123 @@ source: not-an-otter-url
     )
   })
 
+  it('records vault create failures per note and continues the batch', async () => {
+    const app = createFakeApp()
+    const failingPath = 'Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md'
+    app.failCreateFor.add(failingPath)
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [
+        makeSpeech(),
+        makeSpeech({
+          otid: 'second-otid-1234567890',
+          title: 'Second Title',
+          source_url: 'https://otter.ai/u/second-otid-1234567890',
+        }),
+      ],
+    })
+
+    expect(result.stopped).toBe(false)
+    expect(result.notes).toEqual([
+      expect.objectContaining({
+        otid: 'jqb7OHo6mrHtCuMkyLN0nUS8mxY',
+        status: 'failed',
+        path: failingPath,
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            message: `Failed to create file: ${failingPath}`,
+            path: failingPath,
+          }),
+        ]),
+      }),
+      expect.objectContaining({
+        otid: 'second-otid-1234567890',
+        status: 'created',
+        path: 'Meetings/2026-03-11 - Second Title.md',
+      }),
+    ])
+  })
+
+  it('records vault modify failures per note and continues the batch', async () => {
+    const app = createFakeApp()
+    app.fileContents.set('Meetings/existing.md', await readFixture('existing-note.md'))
+    app.failModifyFor.add('Meetings/existing.md')
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [
+        makeSpeech(),
+        makeSpeech({
+          otid: 'second-otid-1234567890',
+          title: 'Second Title',
+          source_url: 'https://otter.ai/u/second-otid-1234567890',
+        }),
+      ],
+    })
+
+    expect(result.stopped).toBe(false)
+    expect(result.notes).toEqual([
+      expect.objectContaining({
+        otid: 'jqb7OHo6mrHtCuMkyLN0nUS8mxY',
+        status: 'failed',
+        path: 'Meetings/existing.md',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            message: 'Failed to modify file: Meetings/existing.md',
+            path: 'Meetings/existing.md',
+          }),
+        ]),
+      }),
+      expect.objectContaining({
+        otid: 'second-otid-1234567890',
+        status: 'created',
+        path: 'Meetings/2026-03-11 - Second Title.md',
+      }),
+    ])
+  })
+
+  it('records vault read failures after create per note and continues the batch', async () => {
+    const app = createFakeApp()
+    const failingPath = 'Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md'
+    app.failReadFor.add(failingPath)
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [
+        makeSpeech(),
+        makeSpeech({
+          otid: 'second-otid-1234567890',
+          title: 'Second Title',
+          source_url: 'https://otter.ai/u/second-otid-1234567890',
+        }),
+      ],
+    })
+
+    expect(result.stopped).toBe(false)
+    expect(result.notes).toEqual([
+      expect.objectContaining({
+        otid: 'jqb7OHo6mrHtCuMkyLN0nUS8mxY',
+        status: 'failed',
+        path: failingPath,
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            message: `Failed to read file: ${failingPath}`,
+            path: failingPath,
+          }),
+        ]),
+      }),
+      expect.objectContaining({
+        otid: 'second-otid-1234567890',
+        status: 'created',
+        path: 'Meetings/2026-03-11 - Second Title.md',
+      }),
+    ])
+  })
+
   it('skips notes that are not newer than sync_time and updates managed content when they are newer', async () => {
     const app = createFakeApp()
     const existing = await readFixture('existing-note.md')

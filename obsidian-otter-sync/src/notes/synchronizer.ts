@@ -33,6 +33,7 @@ export interface SynchronizerDiagnostic {
     | 'invalid-legacy-source'
     | 'duplicate-note-match'
     | 'destination-folder-create-failed'
+    | 'vault-operation-failed'
   message: string
   path?: string
   fatal?: boolean
@@ -233,6 +234,26 @@ function resolveCreatePath(notes: ParsedNote[], destinationFolder: string, speec
   return `${destinationFolder}/${buildFilename(speech, hasCollision)}`
 }
 
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Vault operation failed'
+}
+
+function buildVaultFailureResult(otid: string, path: string, error: unknown): SynchronizeNoteResult {
+  return {
+    otid,
+    status: 'failed',
+    path,
+    normalized: false,
+    diagnostics: [
+      {
+        code: 'vault-operation-failed',
+        message: toErrorMessage(error),
+        path,
+      },
+    ],
+  }
+}
+
 export async function synchronizeNotes({
   app,
   destinationFolder,
@@ -310,15 +331,19 @@ export async function synchronizeNotes({
 
     if (!match) {
       const path = resolveCreatePath(notes, destinationFolder, speech)
-      const file = await app.vault.create(path, renderNewNote(speech))
-      notes.push(parseNote(file, await app.vault.read(file)))
-      results.push({
-        otid: speech.otid,
-        status: 'created',
-        path,
-        normalized: false,
-        diagnostics: [],
-      })
+      try {
+        const file = await app.vault.create(path, renderNewNote(speech))
+        notes.push(parseNote(file, await app.vault.read(file)))
+        results.push({
+          otid: speech.otid,
+          status: 'created',
+          path,
+          normalized: false,
+          diagnostics: [],
+        })
+      } catch (error) {
+        results.push(buildVaultFailureResult(speech.otid, path, error))
+      }
       continue
     }
 
@@ -364,21 +389,25 @@ export async function synchronizeNotes({
     }
 
     const updatedContent = buildUpdatedNoteContent(speech, match.frontmatter, extracted.userNotes)
-    await app.vault.modify(match.file, updatedContent)
+    try {
+      await app.vault.modify(match.file, updatedContent)
 
-    const reparsed = parseNote(match.file, updatedContent)
-    const noteIndex = notes.findIndex((note) => note.file.path === match.file.path)
-    if (noteIndex !== -1) {
-      notes[noteIndex] = reparsed
+      const reparsed = parseNote(match.file, updatedContent)
+      const noteIndex = notes.findIndex((note) => note.file.path === match.file.path)
+      if (noteIndex !== -1) {
+        notes[noteIndex] = reparsed
+      }
+
+      results.push({
+        otid: speech.otid,
+        status: 'updated',
+        path: match.file.path,
+        normalized: extracted.normalized,
+        diagnostics: noteDiagnostics,
+      })
+    } catch (error) {
+      results.push(buildVaultFailureResult(speech.otid, match.file.path, error))
     }
-
-    results.push({
-      otid: speech.otid,
-      status: 'updated',
-      path: match.file.path,
-      normalized: extracted.normalized,
-      diagnostics: noteDiagnostics,
-    })
   }
 
   return {

@@ -25,14 +25,20 @@ export interface FakeApp {
   }
   fileContents: Map<string, string>
   createdFolders: string[]
+  failCreateFor: Set<string>
   failCreateFolderFor: Set<string>
+  failModifyFor: Set<string>
+  failReadFor: Set<string>
   existingFolders: Set<string>
 }
 
 export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp & App {
   const fileContents = new Map<string, string>()
   const createdFolders: string[] = []
+  const failCreateFor = new Set<string>()
   const failCreateFolderFor = new Set<string>()
+  const failModifyFor = new Set<string>()
+  const failReadFor = new Set<string>()
   const existingFolders = new Set<string>()
 
   const getFile = (path: string): FakeFile | null => {
@@ -56,6 +62,10 @@ export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp & App {
           .map((path) => ({ path, basename: path.split('/').pop() ?? path }))
       },
       async read(file: FakeFile): Promise<string> {
+        if (failReadFor.has(file.path)) {
+          throw new Error(`Failed to read file: ${file.path}`)
+        }
+
         const content = fileContents.get(file.path)
 
         if (content === undefined) {
@@ -65,6 +75,10 @@ export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp & App {
         return content
       },
       async modify(file: FakeFile, content: string): Promise<void> {
+        if (failModifyFor.has(file.path)) {
+          throw new Error(`Failed to modify file: ${file.path}`)
+        }
+
         if (!fileContents.has(file.path)) {
           throw new Error(`File not found: ${file.path}`)
         }
@@ -72,6 +86,10 @@ export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp & App {
         fileContents.set(file.path, content)
       },
       async create(path: string, content: string): Promise<FakeFile> {
+        if (failCreateFor.has(path)) {
+          throw new Error(`Failed to create file: ${path}`)
+        }
+
         fileContents.set(path, content)
         return { path, basename: path.split('/').pop() ?? path }
       },
@@ -105,7 +123,10 @@ export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp & App {
     },
     fileContents,
     createdFolders,
+    failCreateFor,
     failCreateFolderFor,
+    failModifyFor,
+    failReadFor,
     existingFolders,
     ...overrides,
   } as FakeApp & App
