@@ -50,6 +50,6 @@ export function appendRunHistory(recentRuns: RunRecord[], runRecord: RunRecord):
 export function recordRunResult(diagnostics: DiagnosticsState, runRecord: RunRecord): DiagnosticsState {
   return {
     recentRuns: appendRunHistory(diagnostics.recentRuns, runRecord),
-    lastErrorSummary: runRecord.errorSummary,
+    lastErrorSummary: runRecord.errorSummary ?? diagnostics.lastErrorSummary,
   }
 }

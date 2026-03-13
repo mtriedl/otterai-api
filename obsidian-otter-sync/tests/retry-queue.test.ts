@@ -101,6 +101,17 @@ describe('retry queue helpers', () => {
       ),
     ).toEqual([buildRetryEntry({ modified_time: 300, failure_reason: 'new reason' })])
   })
+
+  it('keeps the newest normalized payload when a stale retry failure arrives for the same otid', () => {
+    expect(
+      replaceRetryEntry(
+        [buildRetryEntry({ otid: 'speech-4', modified_time: 500, title: 'Newest payload', failure_reason: 'old failure' })],
+        buildRetryEntry({ otid: 'speech-4', modified_time: 200, title: 'Stale payload', failure_reason: 'latest failure' }),
+      ),
+    ).toEqual([
+      buildRetryEntry({ otid: 'speech-4', modified_time: 500, title: 'Newest payload', failure_reason: 'latest failure' }),
+    ])
+  })
 })
 
 describe('diagnostics helpers', () => {
@@ -200,5 +211,43 @@ describe('diagnostics helpers', () => {
     ])
     expect(JSON.stringify(diagnostics.recentRuns[0])).not.toContain('super-secret')
     expect(JSON.stringify(diagnostics.recentRuns[0])).not.toContain('python sync.py --token')
+  })
+
+  it('keeps the most recent failure summary when a later run succeeds', () => {
+    const failedDiagnostics = recordRunResult(DEFAULT_DIAGNOSTICS, {
+      runMode: 'scheduled',
+      startedAt: '2026-03-12T10:00:00.000Z',
+      endedAt: '2026-03-12T10:00:30.000Z',
+      fetchWatermarkUsed: 100,
+      fetchedUntil: 200,
+      retryReplay: false,
+      counts: { created: 0, updated: 0, skipped: 0, failed: 1 },
+      commandSummary: summarizeCommandForDiagnostics('python sync.py {since} {mode}', 'darwin'),
+      exitCode: 1,
+      stderrSnippet: 'boom',
+      speechCount: 1,
+      errorSummary: 'latest failure summary',
+      noteFailures: [],
+    })
+
+    const succeededDiagnostics = recordRunResult(failedDiagnostics, {
+      runMode: 'scheduled',
+      startedAt: '2026-03-12T11:00:00.000Z',
+      endedAt: '2026-03-12T11:00:30.000Z',
+      fetchWatermarkUsed: 200,
+      fetchedUntil: 300,
+      retryReplay: false,
+      counts: { created: 1, updated: 0, skipped: 0, failed: 0 },
+      commandSummary: summarizeCommandForDiagnostics('python sync.py {since} {mode}', 'darwin'),
+      exitCode: 0,
+      stderrSnippet: null,
+      speechCount: 1,
+      errorSummary: null,
+      noteFailures: [],
+    })
+
+    expect(succeededDiagnostics.lastErrorSummary).toBe('latest failure summary')
+    expect(succeededDiagnostics.recentRuns).toHaveLength(2)
+    expect(succeededDiagnostics.recentRuns[1]?.errorSummary).toBeNull()
   })
 })

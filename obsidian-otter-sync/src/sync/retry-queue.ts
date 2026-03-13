@@ -55,5 +55,17 @@ export function replaceRetryEntry(pendingRetries: RetryEntry[], nextEntry: Retry
     return [...pendingRetries, nextEntry]
   }
 
-  return pendingRetries.map((entry, index) => (index === existingIndex ? nextEntry : entry))
+  return pendingRetries.map((entry, index) => {
+    if (index !== existingIndex) {
+      return entry
+    }
+
+    const freshestPayload = nextEntry.modified_time >= entry.modified_time ? nextEntry : entry
+
+    return {
+      ...freshestPayload,
+      failure_reason: nextEntry.failure_reason,
+      last_attempted_at: nextEntry.last_attempted_at,
+    }
+  })
 }
