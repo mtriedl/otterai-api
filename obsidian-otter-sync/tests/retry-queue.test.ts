@@ -112,6 +112,22 @@ describe('retry queue helpers', () => {
       buildRetryEntry({ otid: 'speech-4', modified_time: 500, title: 'Newest payload', failure_reason: 'latest failure' }),
     ])
   })
+
+  it('collapses duplicate queued retry entries to a single freshest entry for the otid', () => {
+    expect(
+      replaceRetryEntry(
+        [
+          buildRetryEntry({ otid: 'speech-5', modified_time: 100, title: 'Stale duplicate' }),
+          buildRetryEntry({ otid: 'speech-5', modified_time: 600, title: 'Freshest duplicate', failure_reason: 'previous failure' }),
+          buildRetryEntry({ otid: 'speech-6', modified_time: 300, title: 'Other otid' }),
+        ],
+        buildRetryEntry({ otid: 'speech-5', modified_time: 400, title: 'Incoming failure', failure_reason: 'latest failure' }),
+      ),
+    ).toEqual([
+      buildRetryEntry({ otid: 'speech-5', modified_time: 600, title: 'Freshest duplicate', failure_reason: 'latest failure' }),
+      buildRetryEntry({ otid: 'speech-6', modified_time: 300, title: 'Other otid' }),
+    ])
+  })
 })
 
 describe('diagnostics helpers', () => {

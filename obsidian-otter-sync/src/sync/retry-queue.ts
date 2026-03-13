@@ -49,23 +49,28 @@ export function markRetrySuccess(pendingRetries: RetryEntry[], otid: string): Re
 }
 
 export function replaceRetryEntry(pendingRetries: RetryEntry[], nextEntry: RetryEntry): RetryEntry[] {
-  const existingIndex = pendingRetries.findIndex((entry) => entry.otid === nextEntry.otid)
+  const matchingEntries = pendingRetries.filter((entry) => entry.otid === nextEntry.otid)
+  const firstMatchingIndex = pendingRetries.findIndex((entry) => entry.otid === nextEntry.otid)
 
-  if (existingIndex === -1) {
+  if (matchingEntries.length === 0) {
     return [...pendingRetries, nextEntry]
   }
 
-  return pendingRetries.map((entry, index) => {
-    if (index !== existingIndex) {
-      return entry
-    }
+  const freshestPayload = matchingEntries.reduce((freshest, entry) =>
+    entry.modified_time > freshest.modified_time ? entry : freshest,
+  nextEntry)
 
-    const freshestPayload = nextEntry.modified_time >= entry.modified_time ? nextEntry : entry
+  const collapsedEntry: RetryEntry = {
+    ...freshestPayload,
+    failure_reason: nextEntry.failure_reason,
+    last_attempted_at: nextEntry.last_attempted_at,
+  }
 
-    return {
-      ...freshestPayload,
-      failure_reason: nextEntry.failure_reason,
-      last_attempted_at: nextEntry.last_attempted_at,
-    }
-  })
+  const dedupedEntries = pendingRetries.filter((entry) => entry.otid !== nextEntry.otid)
+
+  return [
+    ...dedupedEntries.slice(0, firstMatchingIndex),
+    collapsedEntry,
+    ...dedupedEntries.slice(firstMatchingIndex),
+  ]
 }
