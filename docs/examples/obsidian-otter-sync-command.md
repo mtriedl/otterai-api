@@ -5,26 +5,51 @@ Use the plugin setting as a full command template. The plugin replaces `{since}`
 ## Template rules
 
 - Include both bare placeholders: `{since}` and `{mode}`
+- Include `--output-dir` with a writable directory path for bridge payload files
 - Do not pre-quote placeholders such as `"{since}"` or `'{mode}'`
 - The plugin executes the rendered command through `/bin/sh -lc` on macOS/Linux and `cmd.exe /d /s /c` on Windows
 - `{mode}` is one of `scheduled`, `manual`, or `forced`
 - `{since}` is the computed Unix timestamp used for the fetch window
+- The bridge is responsible for creating the `--output-dir` directory when it does not exist
 
 ## Example template
 
 ```text
-python ~/bin/otter_sync.py --since {since} --mode {mode} --format json
+python ~/bin/otter_sync.py --since {since} --mode {mode} --output-dir ~/.cache/obsidian-otter-sync
 ```
 
 Example rendered command for a forced sync:
 
 ```text
-python ~/bin/otter_sync.py --since '1710000001' --mode 'forced' --format json
+python ~/bin/otter_sync.py --since '1710000001' --mode 'forced' --output-dir ~/.cache/obsidian-otter-sync
 ```
 
-## JSON bridge contract
+## Stdout envelope contract
 
 The command must print one JSON object to stdout with this shape:
+
+```json
+{
+  "payload_path": "/Users/example/.cache/obsidian-otter-sync/payload.json",
+  "fetched_until": 1710003601,
+  "speech_count": 1
+}
+```
+
+Required fields:
+
+- `payload_path`: non-empty string path to the JSON payload file
+- `fetched_until`: integer watermark for the current fetch
+- `speech_count`: integer count of payload speeches
+
+Field expectations:
+
+- Stdout should contain only the envelope JSON; speech data belongs in the payload file
+- `payload_path` should point at the payload file written for this run
+
+## Payload file contract
+
+The plugin treats the file at `payload_path` as the canonical meeting payload. The file contents must be one JSON object with this shape:
 
 ```json
 {
@@ -70,10 +95,14 @@ Field expectations:
 The plugin treats the command as failed when any of the following happen:
 
 - The command template is empty, missing `{since}` or `{mode}`, or quotes either placeholder
+- The command omits `--output-dir` and the bridge exits with an argument error
 - The process cannot start or exits non-zero
 - The process times out
 - Stdout is not valid JSON
-- The JSON payload misses required fields or uses the wrong types
+- The stdout envelope misses `payload_path`, `fetched_until`, or `speech_count`, or uses the wrong types
+- The payload file cannot be read
+- The payload file is not valid JSON
+- The payload JSON misses required fields or uses the wrong types
 
 Failure behavior:
 
@@ -81,3 +110,5 @@ Failure behavior:
 - Scheduled sync records diagnostics and continues trying again on the next cadence
 - The last sync error summary remains visible in settings until a later failure replaces it
 - Copy debug info includes settings, state, and diagnostics while redacting the command template body
+- The plugin keeps the payload file when envelope parsing, payload loading, payload validation, or note processing fails
+- When the `Delete payload files after successful sync` setting is enabled, the plugin removes the payload file only after a fully successful sync
