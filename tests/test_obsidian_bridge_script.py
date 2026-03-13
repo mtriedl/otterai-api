@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 
 SCRIPT_PATH = (
@@ -234,4 +234,83 @@ def test_build_payload_falls_back_from_invalid_detail_values(monkeypatch):
             "timestamp": "0:05",
             "text": "",
         }
+    ]
+
+
+def test_build_payload_raises_on_speeches_list_failure(monkeypatch):
+    bridge = load_bridge_module()
+    mock_client = MagicMock()
+    mock_client.get_speeches.return_value = {
+        "status": 503,
+        "data": {"error": "temporarily unavailable"},
+    }
+
+    monkeypatch.setattr(
+        bridge, "get_authenticated_client", lambda: mock_client, raising=False
+    )
+
+    try:
+        bridge.build_payload(1710000001)
+        assert False, "expected build_payload to fail when speeches listing fails"
+    except RuntimeError as exc:
+        assert "Failed to list speeches" in str(exc)
+
+
+def test_build_payload_fetches_all_incremental_pages(monkeypatch):
+    bridge = load_bridge_module()
+    mock_client = MagicMock()
+    mock_client.get_speeches.side_effect = [
+        {
+            "status": 200,
+            "data": {
+                "speeches": [{"otid": "otter-1", "title": "Page One"}],
+                "last_load_ts": 1710000100,
+            },
+        },
+        {
+            "status": 200,
+            "data": {
+                "speeches": [{"otid": "otter-2", "title": "Page Two"}],
+            },
+        },
+    ]
+    mock_client.get_speech.side_effect = [
+        {
+            "status": 200,
+            "data": {
+                "speech": {
+                    "otid": "otter-1",
+                    "title": "Page One",
+                    "created_at": 1710000001,
+                    "modified_time": 1710000002,
+                    "summary": [],
+                    "transcripts": [],
+                }
+            },
+        },
+        {
+            "status": 200,
+            "data": {
+                "speech": {
+                    "otid": "otter-2",
+                    "title": "Page Two",
+                    "created_at": 1710000003,
+                    "modified_time": 1710000004,
+                    "summary": [],
+                    "transcripts": [],
+                }
+            },
+        },
+    ]
+
+    monkeypatch.setattr(
+        bridge, "get_authenticated_client", lambda: mock_client, raising=False
+    )
+
+    payload = bridge.build_payload(1710000001)
+
+    assert [speech["otid"] for speech in payload["speeches"]] == ["otter-1", "otter-2"]
+    assert mock_client.get_speeches.call_args_list == [
+        call(modified_after=1710000001),
+        call(modified_after=1710000001, last_load_ts=1710000100),
     ]

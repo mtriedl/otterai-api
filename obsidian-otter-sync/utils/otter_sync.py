@@ -107,6 +107,33 @@ def _normalize_segment_text(transcript):
     return ""
 
 
+def _fetch_incremental_speeches(client, since):
+    speeches = []
+    last_load_ts = None
+    seen_tokens = set()
+
+    while True:
+        kwargs = {"modified_after": since}
+        if last_load_ts is not None:
+            kwargs["last_load_ts"] = last_load_ts
+
+        speeches_result = client.get_speeches(**kwargs)
+        if speeches_result.get("status") != 200:
+            raise RuntimeError(f"Failed to list speeches: {speeches_result}")
+
+        data = speeches_result.get("data", {})
+        speeches.extend(data.get("speeches", []))
+
+        next_last_load_ts = _try_int(data.get("last_load_ts"))
+        if next_last_load_ts is None or next_last_load_ts in seen_tokens:
+            break
+
+        seen_tokens.add(next_last_load_ts)
+        last_load_ts = next_last_load_ts
+
+    return speeches
+
+
 def _format_segment_timestamp(value):
     if isinstance(value, str):
         stripped = value.strip()
@@ -177,8 +204,7 @@ def build_payload(since, fetched_until=None):
         fetched_until = int(time.time())
 
     client = get_authenticated_client()
-    speeches_result = client.get_speeches(modified_after=since)
-    speeches = speeches_result.get("data", {}).get("speeches", [])
+    speeches = _fetch_incremental_speeches(client, since)
 
     normalized_speeches = []
     for summary_speech in speeches:
