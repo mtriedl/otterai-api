@@ -95,6 +95,10 @@ function summarizeCounts(counts: RunCounts): string {
   return `${counts.created} created, ${counts.updated} updated, ${counts.skipped} skipped, ${counts.failed} failed.`
 }
 
+function summarizeFailure(counts: RunCounts, message: string): string {
+  return `Sync failed: ${summarizeCounts(counts)} ${message}`
+}
+
 function buildCounts(notes: SynchronizeNoteResult[]): RunCounts {
   return notes.reduce<RunCounts>(
     (counts, note) => {
@@ -199,11 +203,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
     })
 
     if (isUserInitiated) {
-      if (counts.failed > 0 || counts.created > 0 || counts.updated > 0 || counts.skipped > 0) {
-        dependencies.notify(`Sync failed: ${summarizeCounts(counts)} ${error.message}`)
-      } else {
-        dependencies.notify(`Sync failed: ${error.message}`)
-      }
+      dependencies.notify(summarizeFailure(counts, error.message))
     } else {
       dependencies.notify(`Scheduled sync failed: ${error.message}`)
     }
@@ -295,7 +295,8 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
 
       const endedAtIso = new Date(dependencies.now()).toISOString()
       const retryReplay = hadPendingRetries
-      const errorSummary = noteFailures[0]?.reason ?? null
+      const fatalNoteStageMessage = noteResult.diagnostics[0]?.message ?? 'Note synchronization failed'
+      const errorSummary = noteFailures[0]?.reason ?? (noteResult.stopped ? fatalNoteStageMessage : null)
 
       await persistRun({
         runMode: mode,
@@ -321,7 +322,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         })
 
         if (isUserInitiated) {
-          dependencies.notify(`Sync failed: ${summarizeCounts(counts)} ${failureMessage}`)
+          dependencies.notify(summarizeFailure(counts, failureMessage))
         } else {
           dependencies.notify(`Scheduled sync failed: ${failureMessage}`)
         }

@@ -278,6 +278,28 @@ describe('sync orchestrator', () => {
     expect(plugin.diagnostics.recentRuns[0]?.commandSummary).toBeDefined()
   })
 
+  it('records a fatal note-stage failure summary in diagnostics', async () => {
+    const plugin = makePlugin()
+    const orchestrator = createSyncOrchestrator(plugin, {
+      now: () => 1_800_000_000_000,
+      notify: () => undefined,
+      runBridgeCommand: vi.fn().mockResolvedValue({ payload: buildPayload(), stdout: '{}', stderr: '', exitCode: 0 }),
+      synchronizeNotes: vi.fn().mockResolvedValue({
+        notes: [],
+        diagnostics: [{ code: 'destination-folder-create-failed', message: 'Failed to create destination folder.', fatal: true }],
+        stopped: true,
+      }),
+    })
+
+    await expect(orchestrator.runSync('manual')).rejects.toThrow('Failed to create destination folder.')
+
+    expect(plugin.diagnostics.recentRuns[0]).toMatchObject({
+      counts: { created: 0, updated: 0, skipped: 0, failed: 0 },
+      errorSummary: 'Failed to create destination folder.',
+      noteFailures: [],
+    })
+  })
+
   it('rejects overlapping runs and releases the lock after completion and failure', async () => {
     let resolveNotes: ((value: { notes: never[]; diagnostics: never[]; stopped: false }) => void) | undefined
     const plugin = makePlugin()
@@ -442,7 +464,29 @@ describe('sync orchestrator', () => {
     })
 
     await expect(orchestrator.runSync('manual')).rejects.toThrow('Sync requires Obsidian desktop with local process execution enabled')
-    expect(notices).toEqual(['Sync failed: Sync requires Obsidian desktop with local process execution enabled'])
+    expect(notices).toEqual([
+      'Sync failed: 0 created, 0 updated, 0 skipped, 0 failed. Sync requires Obsidian desktop with local process execution enabled',
+    ])
+  })
+
+  it('includes zero counts in early manual bridge failure notices', async () => {
+    const notices: string[] = []
+    const plugin = makePlugin()
+    const orchestrator = createSyncOrchestrator(plugin, {
+      notify: (message) => {
+        notices.push(message)
+      },
+      runBridgeCommand: vi.fn().mockRejectedValue(new Error('bridge failed before writes')),
+      synchronizeNotes: vi.fn(),
+    })
+
+    await expect(orchestrator.runSync('manual')).rejects.toThrow('bridge failed before writes')
+
+    expect(notices).toEqual([
+      'Sync started.',
+      'Fetching Otter meetings...',
+      'Sync failed: 0 created, 0 updated, 0 skipped, 0 failed. bridge failed before writes',
+    ])
   })
 })
 
