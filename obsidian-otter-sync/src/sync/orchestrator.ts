@@ -1,7 +1,7 @@
 import { Notice } from 'obsidian'
 
 import { recordRunResult, type NoteFailureRecord, type RunCounts, type RunRecord } from '../diagnostics'
-import type { OtterSyncSettings } from '../settings'
+import { getRequiredSyncSettingsError, type OtterSyncSettings } from '../settings'
 import type { RetryEntry, SyncState } from '../state'
 import { synchronizeNotes, type SynchronizeNoteResult, type SynchronizeNotesResult } from '../notes/synchronizer'
 import {
@@ -228,6 +228,17 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         settings: plugin.settings,
         state: plugin.state,
       })
+      const requiredSettingsError = getRequiredSyncSettingsError(plugin.settings)
+
+      if (requiredSettingsError !== null) {
+        return await failRun(
+          mode,
+          startedAtIso,
+          fetchWatermarkUsed,
+          commandSummary,
+          buildErrorWithMetadata(requiredSettingsError),
+        )
+      }
 
       if (!plugin.isLocalProcessExecutionAvailable()) {
         return await failRun(

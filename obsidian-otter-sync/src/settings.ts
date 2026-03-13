@@ -41,7 +41,29 @@ export function mergeSettings(data?: PersistedPluginData): OtterSyncSettings {
 }
 
 export function hasRequiredSyncSettings(settings: OtterSyncSettings): boolean {
-  return settings.destinationFolder.trim() !== '' && settings.commandTemplate.trim() !== ''
+  return getRequiredSyncSettingsError(settings) === null
+}
+
+export function getRequiredSyncSettingsError(settings: OtterSyncSettings): string | null {
+  const missingSettings: string[] = []
+
+  if (settings.destinationFolder.trim() === '') {
+    missingSettings.push('destination folder')
+  }
+
+  if (settings.commandTemplate.trim() === '') {
+    missingSettings.push('Python command template')
+  }
+
+  if (missingSettings.length === 0) {
+    return null
+  }
+
+  if (missingSettings.length === 1) {
+    return `Sync requires ${missingSettings[0]} to be configured before syncing`
+  }
+
+  return `Sync requires ${missingSettings[0]} and ${missingSettings[1]} settings to be configured before syncing`
 }
 
 export function mergeState(data?: PersistedPluginData): SyncState {

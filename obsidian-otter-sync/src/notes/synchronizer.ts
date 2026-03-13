@@ -303,6 +303,20 @@ export async function synchronizeNotes({
   const diagnostics: SynchronizerDiagnostic[] = []
   const normalizedDestinationFolder = normalizeDestinationFolderPath(destinationFolder)
 
+  if (normalizedDestinationFolder === '') {
+    diagnostics.push({
+      code: 'destination-folder-create-failed',
+      message: 'Destination folder setting must not be empty.',
+      fatal: true,
+    })
+
+    return {
+      notes: [],
+      diagnostics,
+      stopped: true,
+    }
+  }
+
   const destinationEntry = app.vault.getAbstractFileByPath(normalizedDestinationFolder)
 
   if (destinationEntry !== null && isVaultFile(destinationEntry)) {

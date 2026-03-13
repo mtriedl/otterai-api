@@ -120,6 +120,28 @@ describe('synchronizeNotes', () => {
     expect(app.workspace.getFileByPath('Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md')).not.toBeNull()
   })
 
+  it('fails fast with a configuration error when the destination folder is blank', async () => {
+    const app = createFakeApp()
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: '   ',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.stopped).toBe(true)
+    expect(result.notes).toEqual([])
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'destination-folder-create-failed',
+        fatal: true,
+        message: 'Destination folder setting must not be empty.',
+      }),
+    ])
+    expect(app.createdFolders).toEqual([])
+    expect(app.workspace.getFileByPath('/2026-03-11 - Quarterly Planning Review Kickoff.md')).toBeNull()
+  })
+
   it('creates nested destination folders parent by parent before writing notes', async () => {
     const app = createFakeApp()
 

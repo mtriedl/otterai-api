@@ -591,6 +591,31 @@ describe('sync orchestrator', () => {
     ])
   })
 
+  it.each(['manual', 'forced'] as const)(
+    'rejects %s syncs before bridge or note work when required settings are missing',
+    async (mode) => {
+      const notices: string[] = []
+      const plugin = makePlugin({ settings: { destinationFolder: '   ' } })
+      const runBridgeCommand = vi.fn()
+      const synchronizeNotes = vi.fn()
+      const orchestrator = createSyncOrchestrator(plugin, {
+        notify: (message) => {
+          notices.push(message)
+        },
+        runBridgeCommand,
+        synchronizeNotes,
+      })
+
+      await expect(orchestrator.runSync(mode)).rejects.toThrow('Sync requires destination folder to be configured before syncing')
+
+      expect(runBridgeCommand).not.toHaveBeenCalled()
+      expect(synchronizeNotes).not.toHaveBeenCalled()
+      expect(notices).toEqual([
+        'Sync failed: 0 created, 0 updated, 0 skipped, 0 failed. Sync requires destination folder to be configured before syncing',
+      ])
+    },
+  )
+
   it('includes zero counts in early manual bridge failure notices', async () => {
     const notices: string[] = []
     const plugin = makePlugin()
