@@ -2,9 +2,9 @@
 
 ## Overview
 
-Build an Obsidian plugin in a new subdirectory of this repository that syncs OtterAI speeches into Obsidian meeting notes. The plugin runs on a schedule while Obsidian is open and also supports manual sync. It does not call Otter directly. Instead, it executes a user-configured Python command that uses the existing `otterai-api` package and returns normalized meeting data.
+Build an Obsidian plugin in a new subdirectory of this repository that syncs OtterAI speeches into Obsidian meeting notes. The plugin runs on a schedule while Obsidian is open and also supports manual sync. It does not call Otter directly. Instead, it executes a user-configured Python command that uses the existing `otterai-api` package, prints a stdout envelope, and writes normalized meeting data into a payload file.
 
-This design keeps Otter authentication and API access in Python, where the current repo already has working support for speech listing and incremental fetches using `modified_after` and `modified_time`. The Obsidian plugin remains responsible for scheduling, note discovery, note creation and update, sync state, and user-facing diagnostics.
+This design keeps Otter authentication and API access in Python, where the current repo already has working support for speech listing and incremental fetches using `modified_after` and `modified_time`. The Obsidian plugin remains responsible for scheduling, note discovery, note creation and update, sync state, payload-file cleanup, and user-facing diagnostics.
 
 The plugin is explicitly desktop-only for v1 because it depends on local process execution to run the user-provided Python command. Mobile Obsidian clients should treat the plugin as unsupported and show a clear configuration error rather than attempting sync.
 
@@ -113,8 +113,8 @@ Responsibilities:
 - Execute the configured Python command.
 - Pass sync parameters such as fetch watermark, run mode, and backfill overrides.
 - Capture stdout, stderr, and process exit code.
-- Parse JSON output.
-- Validate that the returned payload conforms to the expected normalized schema.
+- Parse the stdout envelope JSON.
+- Load and validate the payload file referenced by the stdout envelope.
 
 Dependencies:
 
@@ -126,21 +126,22 @@ The bridge is intentionally thin. All Otter-specific fetching stays on the Pytho
 For v1, the bridge interface should be fixed rather than deferred. The plugin executes a configured command template with explicit required placeholders:
 
 ```text
-<configured command template with {since} and {mode} placeholders>
+<configured command template with {since} and {mode} placeholders plus --output-dir>
 ```
 
-When the user chooses a forced backfill start date, the plugin substitutes that computed Unix timestamp into the `{since}` placeholder. The plugin does not pass secrets. The configured command may point to a script, module invocation, or shell wrapper as long as it accepts the substituted values and prints JSON to stdout.
+When the user chooses a forced backfill start date, the plugin substitutes that computed Unix timestamp into the `{since}` placeholder. The plugin does not pass secrets. The configured command may point to a script, module invocation, or shell wrapper as long as it accepts the substituted values, writes the normalized payload file into the configured `--output-dir`, and prints the stdout envelope JSON.
 
 Execution model for v1:
 
 - The setting is a full command template string, not a path plus separate args fields.
 - The template must include `{since}` and `{mode}` placeholders.
+- The template must also include `--output-dir` with a writable path.
 - Before execution, the plugin substitutes those placeholders with platform-appropriate shell-escaped values.
 - Users should include `{since}` and `{mode}` as bare placeholders, not pre-quoted placeholders. The plugin is responsible for quoting substituted values.
 - If the template contains quoted placeholders such as `"{since}"` or `'{mode}'`, the plugin should treat that as a configuration error and refuse to run until the template is corrected.
 - On macOS and Linux, the plugin executes the final command via `/bin/sh -lc`.
 - On Windows, the plugin executes the final command via `cmd.exe /d /s /c`.
-- Example: `python ~/bin/otter_sync.py --since {since} --mode {mode}`
+- Example: `python ~/bin/otter_sync.py --since {since} --mode {mode} --output-dir ~/.cache/obsidian-otter-sync`
 - The plugin applies a fixed v1 timeout to the command execution, defaulting to 60 seconds.
 - On timeout, the plugin terminates the child process, records a fatal bridge failure, surfaces an error for manual sync, and releases the single-run lock so future scheduled syncs can continue.
 
@@ -196,7 +197,7 @@ Responsibilities:
 1. Load plugin settings and persisted sync state.
 2. Compute fetch watermark as `lastFetchWatermark - 86400`, clamped at zero.
 3. Execute the configured Python command with that watermark.
-4. Parse the returned normalized speeches.
+4. Parse the returned stdout envelope and load the normalized speeches from the payload file.
 5. Update `lastFetchWatermark` from the bridge payload's `fetched_until` value after a successful bridge fetch.
 6. Merge fresh speeches with `pendingRetries`, keyed by `otid`, preferring the freshest payload by `modified_time`.
 7. Process the merged set of speeches independently.
@@ -218,17 +219,36 @@ This allows safe re-discovery without destructive duplication.
 
 ## Python Bridge Contract
 
-The plugin expects the Python command to emit normalized JSON for all speeches updated since the supplied watermark. The CLI shape is fixed in this spec so implementation and testing can target one contract.
+The plugin expects the Python command to emit a small stdout envelope for all speeches updated since the supplied watermark and to write the normalized meeting payload into a file. The CLI shape is fixed in this spec so implementation and testing can target one contract.
 
 The command interface is fixed for v1:
 
 ```text
-<configured command template with {since} and {mode} placeholders>
+<configured command template with {since} and {mode} placeholders plus --output-dir>
 ```
 
 The command must write exactly one JSON object to stdout and use stderr for diagnostics. Any non-JSON stdout output is a contract violation and causes the run to fail.
 
-Expected top-level payload shape:
+Expected stdout envelope shape:
+
+```json
+{
+  "payload_path": "/Users/example/.cache/obsidian-otter-sync/payload.json",
+  "fetched_until": 1773246769,
+  "speech_count": 0
+}
+```
+
+Stdout envelope rules:
+
+- `payload_path` is a required non-empty string path to a JSON payload file.
+- `fetched_until` is a required Unix-seconds watermark representing the upper bound that the Python fetch covered.
+- `speech_count` is a required integer count of payload speeches.
+- After a successful bridge fetch, the plugin persists `lastFetchWatermark = fetched_until`.
+- The Python side should set `fetched_until` to the time immediately before it begins the upstream fetch sequence so the next incremental run can safely query from `lastFetchWatermark - 86400`.
+- Stdout should contain only the envelope. Speech data belongs in the payload file, not stdout.
+
+Expected payload file shape:
 
 ```json
 {
@@ -237,11 +257,11 @@ Expected top-level payload shape:
 }
 ```
 
-Top-level field rules:
+Payload field rules:
 
-- `fetched_until` is a required Unix-seconds watermark representing the upper bound that the Python fetch covered.
-- After a successful bridge fetch, the plugin persists `lastFetchWatermark = fetched_until`.
-- The Python side should set `fetched_until` to the time immediately before it begins the upstream fetch sequence so the next incremental run can safely query from `lastFetchWatermark - 86400`.
+- The plugin reads the file at `payload_path` after envelope validation.
+- The payload file must contain the normalized `fetched_until` watermark and `speeches` array.
+- The payload file must be valid JSON. Malformed or unreadable payload files fail the run.
 
 Expected per-speech fields and types:
 
@@ -260,7 +280,7 @@ Expected transcript segment fields and types:
 - `timestamp` as a display string such as `0:05`
 - `text` as a string, allowing empty content
 
-Null values are not allowed for required fields in the normalized payload. The Python side should convert upstream missing values into explicit fallback strings or empty arrays before returning the payload.
+Null values are not allowed for required fields in the normalized payload. The Python side should convert upstream missing values into explicit fallback strings or empty arrays before writing the payload.
 
 Canonical identity rules:
 
@@ -271,7 +291,7 @@ Canonical identity rules:
 
 All note detection, duplicate handling, updates, and retry deduplication should use `otid` as the canonical identity. Raw `source_url` string equality is not used as the primary matcher.
 
-If the command exits non-zero, emits invalid JSON, or returns malformed data, the run should fail with a diagnostic entry and a user-visible error for manual sync.
+If the command exits non-zero, emits invalid stdout JSON, returns an invalid stdout envelope, cannot produce a readable payload file, or returns malformed payload data, the run should fail with a diagnostic entry and a user-visible error for manual sync.
 
 Persisted sync state for v1:
 
@@ -450,6 +470,8 @@ Per-note failures should include:
 - A successful bridge fetch should advance `lastFetchWatermark` even if one or more note writes fail.
 - A partially successful run should report partial results clearly and must not advance `lastCleanSyncTime`.
 - Per-note failures must be added to the pending retry queue so they can be retried on the next run without freezing the incremental fetch watermark.
+- The plugin keeps the payload file when envelope parsing, payload loading, payload validation, or note processing fails so the user can inspect what the bridge produced.
+- When the `Delete payload files after successful sync` setting is enabled, the plugin deletes the payload file only after a fully successful sync.
 
 ### User Debugging Support
 
@@ -462,7 +484,8 @@ The settings UI should expose recent run diagnostics and a `Copy last sync debug
 1. Python bridge tests
    - Command construction
    - First-run and forced backfill parameter handling
-   - Stdout and stderr parsing
+   - Stdout envelope and stderr parsing
+   - Payload file loading and validation
    - Invalid JSON handling
    - Non-zero exit handling
    - Schema validation
@@ -511,7 +534,10 @@ Implementation should also include a short manual verification checklist in Obsi
 ## Risks and Mitigations
 
 - Python environment misconfiguration
-  - Mitigation: strong command validation, stderr capture, and clear setup guidance.
+   - Mitigation: strong command validation, stderr capture, and clear setup guidance.
+
+- Payload file accumulation on disk
+  - Mitigation: configurable cleanup after successful sync, while retaining failed payloads for debugging.
 
 - Otter payload inconsistencies
   - Mitigation: validate normalized JSON at the bridge boundary and degrade gracefully on per-note failures.
@@ -530,7 +556,7 @@ This gives the smallest viable architecture for v1:
 
 - Obsidian handles UX, scheduling, vault operations, and state.
 - Python handles Otter access using the existing library and saved credentials.
-- The boundary between them is a normalized JSON contract that is easy to test.
+- The boundary between them is a stdout-envelope-plus-payload-file JSON contract that is easy to test.
 
 ## Open Items for Planning
 
