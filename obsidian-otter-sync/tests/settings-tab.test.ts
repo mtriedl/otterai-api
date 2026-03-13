@@ -284,7 +284,7 @@ describe('OtterSync settings tab', () => {
     expect(getRecordedSetting(tab, 'First-run backfill').textValues[0]).toBe('7')
   })
 
-  it('ignores invalid absolute-date backfill values', async () => {
+  it('does not persist invalid absolute-date backfill values while preserving the draft', async () => {
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
     plugin.settings = {
@@ -304,7 +304,40 @@ describe('OtterSync settings tab', () => {
     await getRecordedSetting(tab, 'First-run backfill').textChangeHandlers[0]?.('March 1, 2026')
 
     expect(plugin.settings.firstRunBackfillValue).toBe('2026-03-01')
-    expect(getRecordedSetting(tab, 'First-run backfill').textValues[0]).toBe('2026-03-01')
+    expect(getRecordedSetting(tab, 'First-run backfill').textValues[0]).toBe('March 1, 2026')
+  })
+
+  it('keeps in-progress absolute-date edits visible until they become valid', async () => {
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+    plugin.settings = {
+      ...DEFAULT_SETTINGS,
+      firstRunBackfillMode: 'absoluteDate',
+      firstRunBackfillValue: '2026-03-01',
+    }
+    plugin.state = { ...DEFAULT_SYNC_STATE }
+    plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS }
+
+    const updateSettingsSpy = vi.spyOn(plugin, 'updateSettings')
+
+    const { OtterSyncSettingTab } = await import('../src/settings-tab')
+    const tab = new OtterSyncSettingTab(plugin.app as never, plugin)
+
+    tab.display()
+
+    getRecordedSetting(tab, 'First-run backfill').textValues[0] = '2026-03-'
+    await getRecordedSetting(tab, 'First-run backfill').textChangeHandlers[0]?.('2026-03-')
+
+    expect(plugin.settings.firstRunBackfillValue).toBe('2026-03-01')
+    expect(updateSettingsSpy).not.toHaveBeenCalled()
+    expect(getRecordedSetting(tab, 'First-run backfill').textValues[0]).toBe('2026-03-')
+
+    getRecordedSetting(tab, 'First-run backfill').textValues[0] = '2026-03-02'
+    await getRecordedSetting(tab, 'First-run backfill').textChangeHandlers[0]?.('2026-03-02')
+
+    expect(plugin.settings.firstRunBackfillValue).toBe('2026-03-02')
+    expect(updateSettingsSpy).toHaveBeenCalledTimes(1)
+    expect(getRecordedSetting(tab, 'First-run backfill').textValues[0]).toBe('2026-03-02')
   })
 
   it('copies the last sync debug info summary', async () => {

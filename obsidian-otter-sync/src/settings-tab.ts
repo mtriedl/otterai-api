@@ -145,6 +145,13 @@ async function copyDebugInfo(text: string): Promise<void> {
 
 export class OtterSyncSettingTab extends PluginSettingTab {
   plugin: OtterSyncPlugin
+  private absoluteDateDrafts: {
+    firstRunBackfillValue: string | null
+    forcedBackfillValue: string | null
+  } = {
+    firstRunBackfillValue: null,
+    forcedBackfillValue: null,
+  }
 
   constructor(app: OtterSyncPlugin['app'], plugin: OtterSyncPlugin) {
     super(app, plugin)
@@ -154,6 +161,32 @@ export class OtterSyncSettingTab extends PluginSettingTab {
   private async updateBackfillSettings(update: Partial<OtterSyncPlugin['settings']>): Promise<void> {
     await this.plugin.updateSettings(update)
     this.display()
+  }
+
+  private getBackfillInputValue(
+    draftKey: keyof OtterSyncSettingTab['absoluteDateDrafts'],
+    mode: BackfillMode,
+    value: number | string,
+  ): string {
+    return mode === 'absoluteDate' ? this.absoluteDateDrafts[draftKey] ?? String(value) : String(value)
+  }
+
+  private async updateAbsoluteDateBackfillValue(
+    draftKey: keyof OtterSyncSettingTab['absoluteDateDrafts'],
+    settingKey: 'firstRunBackfillValue' | 'forcedBackfillValue',
+    value: string,
+  ): Promise<void> {
+    const parsedValue = parseAbsoluteDate(value)
+
+    if (parsedValue === null) {
+      this.absoluteDateDrafts[draftKey] = value
+      return
+    }
+
+    this.absoluteDateDrafts[draftKey] = null
+    await this.updateBackfillSettings({
+      [settingKey]: parsedValue,
+    })
   }
 
   display(): void {
@@ -203,6 +236,7 @@ export class OtterSyncSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.firstRunBackfillMode)
           .onChange(async (value) => {
             const mode = value as BackfillMode
+            this.absoluteDateDrafts.firstRunBackfillValue = null
             await this.updateBackfillSettings({
               firstRunBackfillMode: mode,
               firstRunBackfillValue: resolveBackfillValue(
@@ -215,9 +249,20 @@ export class OtterSyncSettingTab extends PluginSettingTab {
       })
       .addText((component) => {
         component
-          .setValue(String(this.plugin.settings.firstRunBackfillValue))
+          .setValue(
+            this.getBackfillInputValue(
+              'firstRunBackfillValue',
+              this.plugin.settings.firstRunBackfillMode,
+              this.plugin.settings.firstRunBackfillValue,
+            ),
+          )
           .onChange(async (value) => {
-            const parsedValue = parseBackfillValue(this.plugin.settings.firstRunBackfillMode, value)
+            if (this.plugin.settings.firstRunBackfillMode === 'absoluteDate') {
+              await this.updateAbsoluteDateBackfillValue('firstRunBackfillValue', 'firstRunBackfillValue', value)
+              return
+            }
+
+            const parsedValue = parseRelativeDays(value)
 
             if (parsedValue === null) {
               this.display()
@@ -239,6 +284,7 @@ export class OtterSyncSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.forcedBackfillMode)
           .onChange(async (value) => {
             const mode = value as BackfillMode
+            this.absoluteDateDrafts.forcedBackfillValue = null
             await this.updateBackfillSettings({
               forcedBackfillMode: mode,
               forcedBackfillValue: resolveBackfillValue(
@@ -251,9 +297,20 @@ export class OtterSyncSettingTab extends PluginSettingTab {
       })
       .addText((component) => {
         component
-          .setValue(String(this.plugin.settings.forcedBackfillValue))
+          .setValue(
+            this.getBackfillInputValue(
+              'forcedBackfillValue',
+              this.plugin.settings.forcedBackfillMode,
+              this.plugin.settings.forcedBackfillValue,
+            ),
+          )
           .onChange(async (value) => {
-            const parsedValue = parseBackfillValue(this.plugin.settings.forcedBackfillMode, value)
+            if (this.plugin.settings.forcedBackfillMode === 'absoluteDate') {
+              await this.updateAbsoluteDateBackfillValue('forcedBackfillValue', 'forcedBackfillValue', value)
+              return
+            }
+
+            const parsedValue = parseRelativeDays(value)
 
             if (parsedValue === null) {
               this.display()
