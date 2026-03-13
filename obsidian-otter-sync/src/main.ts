@@ -14,17 +14,25 @@ import {
 import { OtterSyncSettingTab } from './settings-tab'
 import type { SyncState } from './state'
 import { DEFAULT_SYNC_STATE } from './state'
+import { createSyncOrchestrator } from './sync/orchestrator'
 
 export default class OtterSyncPlugin extends Plugin {
   settings: OtterSyncSettings = { ...DEFAULT_SETTINGS }
   state: SyncState = { ...DEFAULT_SYNC_STATE }
   diagnostics: DiagnosticsState = { ...DEFAULT_DIAGNOSTICS }
+  private orchestrator = createSyncOrchestrator(this)
 
   async onload(): Promise<void> {
     await this.loadSettings()
     await this.loadState()
     await this.loadDiagnostics()
     this.addSettingTab(new OtterSyncSettingTab(this.app, this))
+    this.orchestrator.registerCommands()
+    this.orchestrator.startScheduling()
+  }
+
+  async onunload(): Promise<void> {
+    this.orchestrator.stopScheduling()
   }
 
   async loadSettings(): Promise<OtterSyncSettings> {
