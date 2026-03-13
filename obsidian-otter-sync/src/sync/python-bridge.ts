@@ -43,13 +43,19 @@ class PythonBridgeExecutionError extends Error {
   stderr: string
   stdout: string
   exitCode: number | null
+  childPid: number | null
 
-  constructor(name: string, message: string, details: { stderr: string; stdout: string; exitCode: number | null }) {
+  constructor(
+    name: string,
+    message: string,
+    details: { stderr: string; stdout: string; exitCode: number | null; childPid: number | null },
+  ) {
     super(message)
     this.name = name
     this.stderr = details.stderr
     this.stdout = details.stdout
     this.exitCode = details.exitCode
+    this.childPid = details.childPid
   }
 }
 
@@ -215,6 +221,7 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
           stderr,
           stdout,
           exitCode: null,
+          childPid: child.pid ?? null,
         }),
       )
     })
@@ -229,6 +236,7 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
             stderr,
             stdout,
             exitCode: null,
+            childPid: child.pid ?? null,
           }),
         )
         return
@@ -240,6 +248,7 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
             stderr,
             stdout,
             exitCode,
+            childPid: child.pid ?? null,
           }),
         )
         return
@@ -254,6 +263,7 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
             stderr,
             stdout,
             exitCode,
+            childPid: child.pid ?? null,
           }),
         )
         return

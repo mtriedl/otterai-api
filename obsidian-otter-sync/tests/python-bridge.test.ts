@@ -13,6 +13,11 @@ import {
   validateCommandTemplate,
 } from '../src/sync/python-bridge'
 
+interface BridgeExecutionError extends Error {
+  exitCode: number | null
+  childPid?: number | null
+}
+
 const fixturePath = path.resolve(import.meta.dirname, './fixtures/bridge-success.json')
 
 function getError(thunk: () => unknown): Error {
@@ -248,6 +253,22 @@ if (scenario === 'wrapper-child') {
     return false
   }
 
+  async function expectTimeoutError(options: Parameters<typeof runBridgeCommand>[0]): Promise<BridgeExecutionError> {
+    try {
+      await runBridgeCommand(options)
+    } catch (error) {
+      const bridgeError = error as BridgeExecutionError
+      expect(bridgeError).toMatchObject({
+        name: 'PythonBridgeTimeoutError',
+        exitCode: null,
+        childPid: expect.any(Number),
+      })
+      return bridgeError
+    }
+
+    throw new Error('Expected runBridgeCommand to time out')
+  }
+
   it('captures stdout, stderr, exit code, and the validated payload', async () => {
     const result = await runBridgeCommand({
       commandTemplate: makeTemplate('success'),
@@ -318,39 +339,25 @@ if (scenario === 'wrapper-child') {
   })
 
   it('forcibly terminates a bridge that ignores SIGTERM', async () => {
-    await expect(
-      runBridgeCommand({
-        commandTemplate: makeExecTemplate('ignore-term', timeoutPidPath),
-        since: '1773246700',
-        mode: 'manual',
-        timeoutMs: 250,
-      }),
-    ).rejects.toMatchObject({
-      name: 'PythonBridgeTimeoutError',
-      exitCode: null,
+    const error = await expectTimeoutError({
+      commandTemplate: makeExecTemplate('ignore-term', timeoutPidPath),
+      since: '1773246700',
+      mode: 'manual',
+      timeoutMs: 250,
     })
 
-    const pid = Number.parseInt(await readFile(timeoutPidPath, 'utf8'), 10)
-    expect(Number.isInteger(pid)).toBe(true)
-    await expect(waitForProcessExit(pid, 500)).resolves.toBe(true)
+    await expect(waitForProcessExit(error.childPid as number, 500)).resolves.toBe(true)
   })
 
   it('terminates the real bridge process for shell-wrapper commands', async () => {
-    await expect(
-      runBridgeCommand({
-        commandTemplate: makeShellWrapperTemplate(timeoutPidPath),
-        since: '1773246700',
-        mode: 'manual',
-        timeoutMs: 250,
-      }),
-    ).rejects.toMatchObject({
-      name: 'PythonBridgeTimeoutError',
-      exitCode: null,
+    const error = await expectTimeoutError({
+      commandTemplate: makeShellWrapperTemplate(timeoutPidPath),
+      since: '1773246700',
+      mode: 'manual',
+      timeoutMs: 250,
     })
 
-    const pid = Number.parseInt(await readFile(timeoutPidPath, 'utf8'), 10)
-    expect(Number.isInteger(pid)).toBe(true)
-    await expect(waitForProcessExit(pid, 500)).resolves.toBe(true)
+    await expect(waitForProcessExit(error.childPid as number, 500)).resolves.toBe(true)
   })
 
   it('treats command-template validation failures as configuration errors', async () => {
