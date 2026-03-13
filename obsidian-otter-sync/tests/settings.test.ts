@@ -115,6 +115,58 @@ describe('DEFAULT_SETTINGS', () => {
     })
   })
 
+  it('persists the latest logical state when overlapping saves finish out of order', async () => {
+    await ensureTestObsidianModule()
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+    plugin.settings = { ...DEFAULT_SETTINGS }
+    plugin.state = { ...DEFAULT_SYNC_STATE }
+    plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS }
+
+    let persistedData: unknown = null
+    const pendingSaves: Array<{ payload: unknown; resolve: () => void }> = []
+
+    vi.spyOn(plugin, 'saveData').mockImplementation((payload) => {
+      return new Promise<void>((resolve) => {
+        pendingSaves.push({
+          payload,
+          resolve: () => {
+            persistedData = payload
+            resolve()
+          },
+        })
+      })
+    })
+
+    const saveSettingsPromise = plugin.updateSettings({ destinationFolder: 'Archive' })
+    const saveStatePromise = plugin.updateState({ lastFetchWatermark: 101 })
+
+    expect(pendingSaves).toHaveLength(1)
+
+    pendingSaves[0]?.resolve()
+    await Promise.resolve()
+
+    expect(pendingSaves).toHaveLength(2)
+
+    pendingSaves[1]?.resolve()
+
+    await Promise.all([saveSettingsPromise, saveStatePromise])
+
+    expect(persistedData).toEqual({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        destinationFolder: 'Archive',
+      },
+      state: {
+        ...DEFAULT_SYNC_STATE,
+        lastFetchWatermark: 101,
+      },
+      diagnostics: {
+        ...DEFAULT_DIAGNOSTICS,
+      },
+    })
+  })
+
   it('isolates mutable state and diagnostics arrays across fresh loads', async () => {
     await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')

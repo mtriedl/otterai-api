@@ -22,6 +22,8 @@ export default class OtterSyncPlugin extends Plugin {
   state: SyncState = { ...DEFAULT_SYNC_STATE }
   diagnostics: DiagnosticsState = { ...DEFAULT_DIAGNOSTICS }
   private orchestrator = createSyncOrchestrator(this)
+  private persistRequested = false
+  private persistInFlight: Promise<void> | null = null
 
   async onload(): Promise<void> {
     await this.loadSettings()
@@ -119,6 +121,26 @@ export default class OtterSyncPlugin extends Plugin {
   }
 
   private async savePluginData(): Promise<void> {
-    await this.saveData(buildPersistedPluginData(this.settings, this.state, this.diagnostics))
+    this.persistRequested = true
+
+    if (this.persistInFlight) {
+      await this.persistInFlight
+      return
+    }
+
+    this.persistInFlight = this.flushPluginData()
+
+    try {
+      await this.persistInFlight
+    } finally {
+      this.persistInFlight = null
+    }
+  }
+
+  private async flushPluginData(): Promise<void> {
+    do {
+      this.persistRequested = false
+      await this.saveData(buildPersistedPluginData(this.settings, this.state, this.diagnostics))
+    } while (this.persistRequested)
   }
 }
