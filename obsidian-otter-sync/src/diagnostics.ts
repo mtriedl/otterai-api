@@ -11,7 +11,7 @@ export interface RunCounts {
 export interface NoteFailureRecord {
   otid: string
   source_url: string
-  notePath: string
+  notePath?: string
   reason: string
 }
 

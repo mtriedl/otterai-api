@@ -229,6 +229,38 @@ describe('diagnostics helpers', () => {
     expect(JSON.stringify(diagnostics.recentRuns[0])).not.toContain('python sync.py --token')
   })
 
+  it('persists per-note failures even when no note path was resolved', () => {
+    const diagnostics = recordRunResult(DEFAULT_DIAGNOSTICS, {
+      runMode: 'manual',
+      startedAt: '2026-03-12T12:00:00.000Z',
+      endedAt: '2026-03-12T12:00:30.000Z',
+      fetchWatermarkUsed: 321,
+      fetchedUntil: 654,
+      retryReplay: false,
+      counts: { created: 0, updated: 0, skipped: 0, failed: 1 },
+      commandSummary: summarizeCommandForDiagnostics('python sync.py {since} {mode}', 'darwin'),
+      exitCode: 1,
+      stderrSnippet: 'write failed',
+      speechCount: 1,
+      errorSummary: 'note sync failed',
+      noteFailures: [
+        {
+          otid: 'speech-10',
+          source_url: 'https://otter.ai/u/speech-10',
+          reason: 'No destination path resolved',
+        },
+      ],
+    })
+
+    expect(diagnostics.recentRuns[0]?.noteFailures).toEqual([
+      {
+        otid: 'speech-10',
+        source_url: 'https://otter.ai/u/speech-10',
+        reason: 'No destination path resolved',
+      },
+    ])
+  })
+
   it('keeps the most recent failure summary when a later run succeeds', () => {
     const failedDiagnostics = recordRunResult(DEFAULT_DIAGNOSTICS, {
       runMode: 'scheduled',
