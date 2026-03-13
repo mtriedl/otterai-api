@@ -15,6 +15,14 @@ export interface NoteFailureRecord {
   reason: string
 }
 
+export interface SynchronizerDiagnosticRecord {
+  code: string
+  message: string
+  path?: string
+  fatal?: boolean
+  conflictingPaths?: string[]
+}
+
 export interface RunRecord {
   runMode: BridgeMode
   startedAt: string
@@ -29,6 +37,7 @@ export interface RunRecord {
   speechCount: number
   errorSummary: string | null
   noteFailures: NoteFailureRecord[]
+  synchronizerDiagnostics?: SynchronizerDiagnosticRecord[]
 }
 
 export interface DiagnosticsState {

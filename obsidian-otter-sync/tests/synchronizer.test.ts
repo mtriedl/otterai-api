@@ -524,7 +524,7 @@ source: not-an-otter-url
     ])
   })
 
-  it('records unreadable destination notes during preload without aborting the batch', async () => {
+  it('records unreadable destination notes during preload and fails unmatched speeches safely', async () => {
     const app = createFakeApp()
     app.fileContents.set('Meetings/unreadable.md', await readFixture('existing-note.md'))
     app.failReadFor.add('Meetings/unreadable.md')
@@ -539,11 +539,17 @@ source: not-an-otter-url
     expect(result.notes).toEqual([
       expect.objectContaining({
         otid: 'jqb7OHo6mrHtCuMkyLN0nUS8mxY',
-        status: 'created',
-        path: 'Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md',
-        diagnostics: [],
+        status: 'failed',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            code: 'vault-operation-failed',
+            message: 'Failed to safely match existing destination notes because some notes could not be read.',
+            conflictingPaths: ['Meetings/unreadable.md'],
+          }),
+        ]),
       }),
     ])
+    expect(app.fileContents.has('Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md')).toBe(false)
     expect(result.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

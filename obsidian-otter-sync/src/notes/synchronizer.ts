@@ -178,15 +178,17 @@ ${renderTranscript(speech.transcript_segments)}
 async function loadDestinationNotes(
   app: AppLike,
   destinationFolder: string,
-): Promise<{ notes: ParsedNote[]; diagnostics: SynchronizerDiagnostic[] }> {
+): Promise<{ notes: ParsedNote[]; diagnostics: SynchronizerDiagnostic[]; unreadablePaths: string[] }> {
   const files = app.vault.getMarkdownFiles().filter((file) => isDestinationFile(file.path, destinationFolder))
   const diagnostics: SynchronizerDiagnostic[] = []
+  const unreadablePaths: string[] = []
   const loadedNotes = await Promise.all(
     files.map(async (file) => {
       try {
         const content = await app.vault.read(file)
         return parseNote(file, content)
       } catch (error) {
+        unreadablePaths.push(file.path)
         diagnostics.push({
           code: 'vault-operation-failed',
           message: toErrorMessage(error),
@@ -218,7 +220,7 @@ async function loadDestinationNotes(
     })
   }
 
-  return { notes, diagnostics }
+  return { notes, diagnostics, unreadablePaths }
 }
 
 function matchExistingNote(notes: ParsedNote[], speech: BridgeSpeech): ParsedNote[] {
@@ -313,6 +315,7 @@ export async function synchronizeNotes({
   const loaded = await loadDestinationNotes(app, destinationFolder)
   diagnostics.push(...loaded.diagnostics)
   const notes = loaded.notes
+  const unreadablePaths = [...loaded.unreadablePaths].sort()
   const results: SynchronizeNoteResult[] = []
 
   for (const speech of speeches) {
@@ -339,6 +342,22 @@ export async function synchronizeNotes({
     const match = matches[0]
 
     if (!match) {
+      if (unreadablePaths.length > 0) {
+        results.push({
+          otid: speech.otid,
+          status: 'failed',
+          normalized: false,
+          diagnostics: [
+            {
+              code: 'vault-operation-failed',
+              message: 'Failed to safely match existing destination notes because some notes could not be read.',
+              conflictingPaths: unreadablePaths,
+            },
+          ],
+        })
+        continue
+      }
+
       const path = resolveCreatePath(notes, destinationFolder, speech)
       try {
         const file = await app.vault.create(path, renderNewNote(speech))

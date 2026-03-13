@@ -309,6 +309,43 @@ describe('sync orchestrator', () => {
     })
   })
 
+  it('persists non-fatal synchronizer diagnostics on successful note processing', async () => {
+    const plugin = makePlugin()
+    const orchestrator = createSyncOrchestrator(plugin, {
+      now: () => 1_800_000_000_000,
+      notify: () => undefined,
+      runBridgeCommand: vi.fn().mockResolvedValue({ payload: buildPayload(), stdout: '{}', stderr: '', exitCode: 0 }),
+      synchronizeNotes: vi.fn().mockResolvedValue({
+        notes: [
+          { otid: 'speech-1', status: 'updated', path: 'Meetings/Daily Standup.md', normalized: false, diagnostics: [] },
+        ],
+        diagnostics: [
+          {
+            code: 'invalid-legacy-source',
+            message: 'Existing note has an unparseable legacy source value.',
+            path: 'Meetings/unparseable.md',
+          },
+        ],
+        stopped: false,
+      }),
+    })
+
+    await orchestrator.runSync('manual')
+
+    expect(plugin.diagnostics.recentRuns[0]).toMatchObject({
+      counts: { created: 0, updated: 1, skipped: 0, failed: 0 },
+      errorSummary: null,
+      noteFailures: [],
+      synchronizerDiagnostics: [
+        {
+          code: 'invalid-legacy-source',
+          message: 'Existing note has an unparseable legacy source value.',
+          path: 'Meetings/unparseable.md',
+        },
+      ],
+    })
+  })
+
   it('queues fetched speeches for retry when note processing stops fatally before per-note failures', async () => {
     const plugin = makePlugin()
     const orchestrator = createSyncOrchestrator(plugin, {

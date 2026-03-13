@@ -177,6 +177,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
     error: Error & { stderr?: string; exitCode?: number | null },
     counts: RunCounts = { created: 0, updated: 0, skipped: 0, failed: 0 },
     noteFailures: NoteFailureRecord[] = [],
+    synchronizerDiagnostics: RunRecord['synchronizerDiagnostics'] = [],
     fetchedUntil: number | null = null,
     retryReplay = false,
     speechCount = 0,
@@ -198,6 +199,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
       speechCount,
       errorSummary: error.message,
       noteFailures,
+      synchronizerDiagnostics,
     })
 
     if (isUserInitiated) {
@@ -289,6 +291,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
           }),
           { created: 0, updated: 0, skipped: 0, failed: 0 },
           [],
+          [],
           bridgeResult.payload.fetched_until,
           hadPendingRetries,
           bridgeResult.payload.speeches.length,
@@ -340,6 +343,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         speechCount: bridgeResult.payload.speeches.length,
         errorSummary,
         noteFailures,
+        synchronizerDiagnostics: noteResult.diagnostics,
       })
 
       if (noteFailures.length > 0 || noteResult.stopped) {

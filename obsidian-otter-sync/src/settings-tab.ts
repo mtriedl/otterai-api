@@ -67,6 +67,10 @@ function formatRecentDiagnostics(recentRuns: RunRecord[]): string {
         lines.push(`Note failure: ${failure.otid} -> ${failure.reason}`)
       }
 
+      for (const diagnostic of run.synchronizerDiagnostics ?? []) {
+        lines.push(`Synchronizer diagnostic: ${diagnostic.code} -> ${diagnostic.message}`)
+      }
+
       return lines.join('\n')
     })
     .join('\n\n')
