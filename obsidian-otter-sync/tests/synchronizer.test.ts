@@ -81,6 +81,45 @@ describe('synchronizeNotes', () => {
     )
   })
 
+  it('normalizes a trailing slash in the destination folder when matching existing notes', async () => {
+    const app = createFakeApp()
+    app.fileContents.set('Meetings/2026-03-11 - Old Title.md', await readFixture('existing-note.md'))
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings/',
+      speeches: [makeSpeech({ title: 'Refreshed Meeting Title' })],
+    })
+
+    expect(result.notes).toHaveLength(1)
+    expect(result.notes[0]).toMatchObject({
+      otid: 'jqb7OHo6mrHtCuMkyLN0nUS8mxY',
+      status: 'updated',
+      path: 'Meetings/2026-03-11 - Old Title.md',
+      normalized: false,
+    })
+    expect(app.workspace.getFileByPath('Meetings/2026-03-11 - Refreshed Meeting Title.md')).toBeNull()
+  })
+
+  it('normalizes duplicate trailing slashes in the destination folder when creating notes', async () => {
+    const app = createFakeApp()
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings//',
+      speeches: [makeSpeech()],
+    })
+
+    expect(result.notes[0]).toMatchObject({
+      status: 'created',
+      path: 'Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md',
+      normalized: false,
+    })
+    expect(app.createdFolders).toContain('Meetings')
+    expect(app.createdFolders).not.toContain('Meetings//')
+    expect(app.workspace.getFileByPath('Meetings/2026-03-11 - Quarterly Planning Review Kickoff.md')).not.toBeNull()
+  })
+
   it('scans only the configured destination folder for matches and duplicates', async () => {
     const app = createFakeApp()
     app.fileContents.set('Archive/2026-03-11 - Quarterly Planning Review Kickoff.md', await readFixture('existing-note.md'))

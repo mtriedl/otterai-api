@@ -69,6 +69,14 @@ const USER_NOTES_HEADING = /^## User Notes[ \t]*$/gm
 const SECTION_HEADING_PATTERN = /^## (User Notes|Summary|Transcript)[ \t]*$/gm
 const MANAGED_BOUNDARY_HEADING_PATTERN = /^#{2,6}[ \t]+.*(?:summary|transcript).*$/gim
 
+function normalizeDestinationFolderPath(destinationFolder: string): string {
+  return destinationFolder
+    .trim()
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .join('/')
+}
+
 function isDestinationFile(path: string, destinationFolder: string): boolean {
   return path === destinationFolder || path.startsWith(`${destinationFolder}/`)
 }
@@ -275,14 +283,15 @@ export async function synchronizeNotes({
   speeches: BridgeSpeech[]
 }): Promise<SynchronizeNotesResult> {
   const diagnostics: SynchronizerDiagnostic[] = []
+  const normalizedDestinationFolder = normalizeDestinationFolderPath(destinationFolder)
 
-  const destinationEntry = app.vault.getAbstractFileByPath(destinationFolder)
+  const destinationEntry = app.vault.getAbstractFileByPath(normalizedDestinationFolder)
 
   if (destinationEntry !== null && isVaultFile(destinationEntry)) {
     diagnostics.push({
       code: 'destination-folder-create-failed',
       message: 'Destination folder path points to a file instead of a folder.',
-      path: destinationFolder,
+      path: normalizedDestinationFolder,
       fatal: true,
     })
 
@@ -295,12 +304,12 @@ export async function synchronizeNotes({
 
   if (destinationEntry === null) {
     try {
-      await app.vault.createFolder(destinationFolder)
+      await app.vault.createFolder(normalizedDestinationFolder)
     } catch {
       diagnostics.push({
         code: 'destination-folder-create-failed',
         message: 'Failed to create destination folder.',
-        path: destinationFolder,
+        path: normalizedDestinationFolder,
         fatal: true,
       })
 
@@ -312,7 +321,7 @@ export async function synchronizeNotes({
     }
   }
 
-  const loaded = await loadDestinationNotes(app, destinationFolder)
+  const loaded = await loadDestinationNotes(app, normalizedDestinationFolder)
   diagnostics.push(...loaded.diagnostics)
   const notes = loaded.notes
   const unreadablePaths = [...loaded.unreadablePaths].sort()
@@ -358,7 +367,7 @@ export async function synchronizeNotes({
         continue
       }
 
-      const path = resolveCreatePath(notes, destinationFolder, speech)
+      const path = resolveCreatePath(notes, normalizedDestinationFolder, speech)
       try {
         const file = await app.vault.create(path, renderNewNote(speech))
         notes.push(parseNote(file, await app.vault.read(file)))
