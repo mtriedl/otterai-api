@@ -19,19 +19,26 @@ function toCanonicalSpeech(speech: BridgeSpeech | RetryEntry): BridgeSpeech {
   }
 }
 
+function preferFreshestByModifiedTime(
+  merged: Map<string, BridgeSpeech>,
+  speech: BridgeSpeech | RetryEntry,
+): void {
+  const existing = merged.get(speech.otid)
+
+  if (!existing || speech.modified_time >= existing.modified_time) {
+    merged.set(speech.otid, toCanonicalSpeech(speech))
+  }
+}
+
 export function mergeRetryQueueWithFetches(options: MergeRetryQueueWithFetchesOptions): BridgeSpeech[] {
   const merged = new Map<string, BridgeSpeech>()
 
   for (const retryEntry of options.pendingRetries) {
-    merged.set(retryEntry.otid, toCanonicalSpeech(retryEntry))
+    preferFreshestByModifiedTime(merged, retryEntry)
   }
 
   for (const fetchedSpeech of options.fetchedSpeeches) {
-    const existing = merged.get(fetchedSpeech.otid)
-
-    if (!existing || fetchedSpeech.modified_time >= existing.modified_time) {
-      merged.set(fetchedSpeech.otid, toCanonicalSpeech(fetchedSpeech))
-    }
+    preferFreshestByModifiedTime(merged, fetchedSpeech)
   }
 
   return [...merged.values()]

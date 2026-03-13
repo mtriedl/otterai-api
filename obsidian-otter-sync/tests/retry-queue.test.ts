@@ -72,6 +72,18 @@ describe('retry queue helpers', () => {
     expect(merged[0]).not.toHaveProperty('last_attempted_at')
   })
 
+  it('prefers the freshest modified_time when pending retries already contain duplicate otids', () => {
+    expect(
+      mergeRetryQueueWithFetches({
+        pendingRetries: [
+          buildRetryEntry({ otid: 'speech-3', modified_time: 400, title: 'Fresh duplicate retry' }),
+          buildRetryEntry({ otid: 'speech-3', modified_time: 100, title: 'Stale duplicate retry' }),
+        ],
+        fetchedSpeeches: [buildSpeech({ otid: 'speech-3', modified_time: 250, title: 'Fetched middle version' })],
+      }),
+    ).toEqual([buildSpeech({ otid: 'speech-3', modified_time: 400, title: 'Fresh duplicate retry' })])
+  })
+
   it('removes a retry entry immediately after success', () => {
     expect(
       markRetrySuccess(
