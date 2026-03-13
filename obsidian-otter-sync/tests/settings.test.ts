@@ -115,6 +115,36 @@ describe('DEFAULT_SETTINGS', () => {
     })
   })
 
+  it('does not start scheduling when required settings become available in unsupported environments', async () => {
+    await ensureTestObsidianModule()
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(
+      createFakeApp({ isDesktopOnly: false, processExecutionAvailable: false }),
+      createFakeManifest(),
+    )
+    plugin.settings = { ...DEFAULT_SETTINGS }
+    plugin.state = { ...DEFAULT_SYNC_STATE }
+    plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS }
+    vi.spyOn(plugin, 'saveData').mockResolvedValue()
+
+    const orchestrator = (plugin as unknown as {
+      orchestrator: {
+        startScheduling: () => void
+        stopScheduling: () => void
+      }
+    }).orchestrator
+    const stopSchedulingSpy = vi.spyOn(orchestrator, 'stopScheduling')
+    const startSchedulingSpy = vi.spyOn(orchestrator, 'startScheduling')
+
+    await plugin.updateSettings({
+      destinationFolder: 'Meetings',
+      commandTemplate: 'python sync.py {since} {mode}',
+    })
+
+    expect(stopSchedulingSpy).not.toHaveBeenCalled()
+    expect(startSchedulingSpy).not.toHaveBeenCalled()
+  })
+
   it('persists the latest logical state when overlapping saves finish out of order', async () => {
     await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')

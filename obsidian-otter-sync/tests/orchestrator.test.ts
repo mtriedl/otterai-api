@@ -676,4 +676,38 @@ describe('plugin integration', () => {
     expect(plugin.addCommand).toHaveBeenCalledTimes(2)
     expect(setIntervalSpy).not.toHaveBeenCalled()
   })
+
+  it('skips scheduled startup work when local process execution is unavailable', async () => {
+    await ensureTestObsidianModule()
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(
+      createFakeApp({ isDesktopOnly: false, processExecutionAvailable: false }),
+      createFakeManifest(),
+    ) as InstanceType<typeof OtterSyncPlugin> & {
+      addCommand: ReturnType<typeof vi.fn>
+    }
+    plugin.addCommand = vi.fn()
+    plugin.settings = {
+      ...DEFAULT_SETTINGS,
+      destinationFolder: 'Meetings',
+      commandTemplate: 'python sync.py {since} {mode}',
+      syncIntervalMinutes: 15,
+    }
+    vi.spyOn(plugin, 'loadSettings').mockResolvedValue(plugin.settings)
+    vi.spyOn(plugin, 'loadState').mockResolvedValue(plugin.state)
+    vi.spyOn(plugin, 'loadDiagnostics').mockResolvedValue(plugin.diagnostics)
+    const runSyncSpy = vi.spyOn((plugin as unknown as { orchestrator: { runSync: (mode: string) => Promise<unknown> } }).orchestrator, 'runSync').mockResolvedValue({
+      status: 'success',
+      counts: { created: 0, updated: 0, skipped: 0, failed: 0 },
+      fetchedUntil: 1,
+    })
+
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
+
+    await plugin.onload()
+
+    expect(runSyncSpy).not.toHaveBeenCalled()
+    expect(plugin.addCommand).toHaveBeenCalledTimes(2)
+    expect(setIntervalSpy).not.toHaveBeenCalled()
+  })
 })

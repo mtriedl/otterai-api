@@ -32,7 +32,7 @@ export default class OtterSyncPlugin extends Plugin {
     this.addSettingTab(new OtterSyncSettingTab(this.app, this))
     this.orchestrator.registerCommands()
 
-    if (hasRequiredSyncSettings(this.settings)) {
+    if (this.canScheduleSync(this.settings)) {
       this.orchestrator.startScheduling()
       void this.orchestrator.runSync('scheduled').catch(() => undefined)
     }
@@ -77,8 +77,8 @@ export default class OtterSyncPlugin extends Plugin {
       ...this.settings,
       ...update,
     }
-    const wasSchedulable = hasRequiredSyncSettings(this.settings)
-    const isSchedulable = hasRequiredSyncSettings(nextSettings)
+    const wasSchedulable = this.canScheduleSync(this.settings)
+    const isSchedulable = this.canScheduleSync(nextSettings)
     const syncIntervalChanged = this.settings.syncIntervalMinutes !== nextSettings.syncIntervalMinutes
 
     await this.saveSettings(nextSettings)
@@ -113,6 +113,10 @@ export default class OtterSyncPlugin extends Plugin {
     }
 
     return app.isDesktopOnly !== false && app.processExecutionAvailable !== false
+  }
+
+  private canScheduleSync(settings: OtterSyncSettings): boolean {
+    return hasRequiredSyncSettings(settings) && this.isLocalProcessExecutionAvailable()
   }
 
   private async loadPluginData(): Promise<PersistedPluginData> {
