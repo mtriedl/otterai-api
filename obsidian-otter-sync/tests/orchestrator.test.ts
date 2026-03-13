@@ -567,14 +567,19 @@ describe('sync orchestrator', () => {
 })
 
 describe('plugin integration', () => {
-  it('registers sync commands on load, runs an immediate scheduled sync, and starts then clears interval scheduling', async () => {
+  it('registers sync commands on load, runs an immediate scheduled sync, and starts then clears interval scheduling when required settings are configured', async () => {
     await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest()) as OtterSyncPlugin & {
       addCommand: ReturnType<typeof vi.fn>
     }
     plugin.addCommand = vi.fn()
-    plugin.settings = { ...DEFAULT_SETTINGS, syncIntervalMinutes: 15 }
+    plugin.settings = {
+      ...DEFAULT_SETTINGS,
+      destinationFolder: 'Meetings',
+      commandTemplate: 'python sync.py {since} {mode}',
+      syncIntervalMinutes: 15,
+    }
     vi.spyOn(plugin, 'loadSettings').mockResolvedValue(plugin.settings)
     vi.spyOn(plugin, 'loadState').mockResolvedValue(plugin.state)
     vi.spyOn(plugin, 'loadDiagnostics').mockResolvedValue(plugin.diagnostics)
@@ -598,5 +603,31 @@ describe('plugin integration', () => {
 
     await plugin.onunload()
     expect(clearIntervalSpy).toHaveBeenCalledWith(intervalHandle)
+  })
+
+  it('skips scheduled startup work when required settings are blank', async () => {
+    await ensureTestObsidianModule()
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest()) as OtterSyncPlugin & {
+      addCommand: ReturnType<typeof vi.fn>
+    }
+    plugin.addCommand = vi.fn()
+    plugin.settings = { ...DEFAULT_SETTINGS }
+    vi.spyOn(plugin, 'loadSettings').mockResolvedValue(plugin.settings)
+    vi.spyOn(plugin, 'loadState').mockResolvedValue(plugin.state)
+    vi.spyOn(plugin, 'loadDiagnostics').mockResolvedValue(plugin.diagnostics)
+    const runSyncSpy = vi.spyOn((plugin as unknown as { orchestrator: { runSync: (mode: string) => Promise<unknown> } }).orchestrator, 'runSync').mockResolvedValue({
+      status: 'success',
+      counts: { created: 0, updated: 0, skipped: 0, failed: 0 },
+      fetchedUntil: 1,
+    })
+
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
+
+    await plugin.onload()
+
+    expect(runSyncSpy).not.toHaveBeenCalled()
+    expect(plugin.addCommand).toHaveBeenCalledTimes(2)
+    expect(setIntervalSpy).not.toHaveBeenCalled()
   })
 })

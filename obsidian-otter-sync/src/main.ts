@@ -5,6 +5,7 @@ import { DEFAULT_DIAGNOSTICS } from './diagnostics'
 import {
   buildPersistedPluginData,
   DEFAULT_SETTINGS,
+  hasRequiredSyncSettings,
   mergeDiagnostics,
   mergeSettings,
   mergeState,
@@ -28,8 +29,11 @@ export default class OtterSyncPlugin extends Plugin {
     await this.loadDiagnostics()
     this.addSettingTab(new OtterSyncSettingTab(this.app, this))
     this.orchestrator.registerCommands()
-    this.orchestrator.startScheduling()
-    void this.orchestrator.runSync('scheduled').catch(() => undefined)
+
+    if (hasRequiredSyncSettings(this.settings)) {
+      this.orchestrator.startScheduling()
+      void this.orchestrator.runSync('scheduled').catch(() => undefined)
+    }
   }
 
   async onunload(): Promise<void> {
@@ -67,10 +71,23 @@ export default class OtterSyncPlugin extends Plugin {
   }
 
   async updateSettings(update: Partial<OtterSyncSettings>): Promise<void> {
-    await this.saveSettings({
+    const nextSettings = {
       ...this.settings,
       ...update,
-    })
+    }
+    const wasSchedulable = hasRequiredSyncSettings(this.settings)
+    const isSchedulable = hasRequiredSyncSettings(nextSettings)
+    const syncIntervalChanged = this.settings.syncIntervalMinutes !== nextSettings.syncIntervalMinutes
+
+    await this.saveSettings(nextSettings)
+
+    if (wasSchedulable && (!isSchedulable || syncIntervalChanged)) {
+      this.orchestrator.stopScheduling()
+    }
+
+    if (isSchedulable && (!wasSchedulable || syncIntervalChanged)) {
+      this.orchestrator.startScheduling()
+    }
   }
 
   async updateState(update: Partial<SyncState>): Promise<void> {

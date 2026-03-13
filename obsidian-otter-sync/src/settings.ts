@@ -40,6 +40,10 @@ export function mergeSettings(data?: PersistedPluginData): OtterSyncSettings {
   }
 }
 
+export function hasRequiredSyncSettings(settings: OtterSyncSettings): boolean {
+  return settings.destinationFolder.trim() !== '' && settings.commandTemplate.trim() !== ''
+}
+
 export function mergeState(data?: PersistedPluginData): SyncState {
   return {
     ...DEFAULT_SYNC_STATE,

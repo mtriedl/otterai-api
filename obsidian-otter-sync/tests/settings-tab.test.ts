@@ -171,6 +171,39 @@ describe('OtterSync settings tab', () => {
     expect(plugin.settings.forcedBackfillValue).toBe(14)
   })
 
+  it('restarts scheduling when sync cadence changes', async () => {
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+    plugin.settings = {
+      ...DEFAULT_SETTINGS,
+      destinationFolder: 'Meetings',
+      commandTemplate: 'python sync.py {since} {mode}',
+      syncIntervalMinutes: 15,
+    }
+    plugin.state = { ...DEFAULT_SYNC_STATE }
+    plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS }
+
+    const orchestrator = (plugin as unknown as {
+      orchestrator: {
+        startScheduling: () => void
+        stopScheduling: () => void
+      }
+    }).orchestrator
+    const stopSchedulingSpy = vi.spyOn(orchestrator, 'stopScheduling')
+    const startSchedulingSpy = vi.spyOn(orchestrator, 'startScheduling')
+
+    const { OtterSyncSettingTab } = await import('../src/settings-tab')
+    const tab = new OtterSyncSettingTab(plugin.app as never, plugin)
+
+    tab.display()
+
+    await getRecordedSetting(tab, 'Sync cadence').dropdownChangeHandlers[0]?.('30')
+
+    expect(plugin.settings.syncIntervalMinutes).toBe(30)
+    expect(stopSchedulingSpy).toHaveBeenCalledTimes(1)
+    expect(startSchedulingSpy).toHaveBeenCalledTimes(1)
+  })
+
   it('switches absolute-date backfill modes to valid date defaults', async () => {
     const { default: OtterSyncPlugin } = await import('../src/main')
     const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
