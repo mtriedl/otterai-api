@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -45,6 +46,7 @@ def test_cli_requires_args_and_restricts_mode_choices(tmp_path):
 
 def test_cli_writes_minimal_payload_and_prints_stdout_envelope(tmp_path):
     output_dir = tmp_path / "bridge-output"
+    before_run = int(time.time())
 
     result = run_bridge(
         "--since",
@@ -54,12 +56,14 @@ def test_cli_writes_minimal_payload_and_prints_stdout_envelope(tmp_path):
         "--output-dir",
         str(output_dir),
     )
+    after_run = int(time.time())
 
     assert result.returncode == 0
     assert result.stderr == ""
 
     envelope = json.loads(result.stdout)
-    assert envelope["fetched_until"] == 1710000001
+    assert before_run <= envelope["fetched_until"] <= after_run
+    assert envelope["fetched_until"] != 1710000001
     assert envelope["speech_count"] == 0
 
     payload_path = Path(envelope["payload_path"])
@@ -67,4 +71,4 @@ def test_cli_writes_minimal_payload_and_prints_stdout_envelope(tmp_path):
     assert payload_path.exists()
 
     payload = json.loads(payload_path.read_text())
-    assert payload == {"fetched_until": 1710000001, "speeches": []}
+    assert payload == {"fetched_until": envelope["fetched_until"], "speeches": []}

@@ -1,5 +1,6 @@
 import argparse
 import json
+import time
 from pathlib import Path
 
 
@@ -15,7 +16,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    fetched_until = args.since
+    fetched_until = int(time.time())
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
