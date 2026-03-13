@@ -86,6 +86,7 @@ describe('OtterSync settings tab', () => {
       'Python sync command template',
       'First-run backfill',
       'Forced sync backfill',
+      'Delete payload files after successful sync',
       'Show scheduled success notices',
       'Last clean sync time',
       'Last fetch watermark',
@@ -230,6 +231,26 @@ describe('OtterSync settings tab', () => {
     expect(plugin.settings.syncIntervalMinutes).toBe(30)
     expect(stopSchedulingSpy).toHaveBeenCalledTimes(1)
     expect(startSchedulingSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('persists the payload cleanup toggle', async () => {
+    const { default: OtterSyncPlugin } = await import('../src/main')
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest())
+    plugin.settings = {
+      ...DEFAULT_SETTINGS,
+      deletePayloadFilesAfterSync: true,
+    }
+    plugin.state = { ...DEFAULT_SYNC_STATE }
+    plugin.diagnostics = { ...DEFAULT_DIAGNOSTICS }
+
+    const { OtterSyncSettingTab } = await import('../src/settings-tab')
+    const tab = new OtterSyncSettingTab(plugin.app as never, plugin)
+
+    tab.display()
+
+    await getRecordedSetting(tab, 'Delete payload files after successful sync').toggleChangeHandlers[0]?.(false)
+
+    expect(plugin.settings.deletePayloadFilesAfterSync).toBe(false)
   })
 
   it('switches absolute-date backfill modes to valid date defaults', async () => {

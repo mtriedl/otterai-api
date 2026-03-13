@@ -13,6 +13,7 @@ export interface OtterSyncSettings {
   firstRunBackfillValue: number | string
   forcedBackfillMode: BackfillMode
   forcedBackfillValue: number | string
+  deletePayloadFilesAfterSync: boolean
   showScheduledSuccessNotice: boolean
 }
 
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS: OtterSyncSettings = {
   firstRunBackfillValue: 7,
   forcedBackfillMode: 'relativeDays',
   forcedBackfillValue: 30,
+  deletePayloadFilesAfterSync: true,
   showScheduledSuccessNotice: false,
 }
 

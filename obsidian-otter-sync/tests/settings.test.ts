@@ -18,6 +18,7 @@ describe('DEFAULT_SETTINGS', () => {
       firstRunBackfillValue: 7,
       forcedBackfillMode: 'relativeDays',
       forcedBackfillValue: 30,
+      deletePayloadFilesAfterSync: true,
       showScheduledSuccessNotice: false,
     })
   })

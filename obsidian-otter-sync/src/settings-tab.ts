@@ -324,6 +324,15 @@ export class OtterSyncSettingTab extends PluginSettingTab {
       })
 
     new Setting(this.containerEl)
+      .setName('Delete payload files after successful sync')
+      .setDesc('Remove bridge payload files after a sync finishes without parse, validation, or note-processing failures.')
+      .addToggle((component) => {
+        component.setValue(this.plugin.settings.deletePayloadFilesAfterSync).onChange(async (value) => {
+          await this.plugin.updateSettings({ deletePayloadFilesAfterSync: value })
+        })
+      })
+
+    new Setting(this.containerEl)
       .setName('Show scheduled success notices')
       .addToggle((component) => {
         component.setValue(this.plugin.settings.showScheduledSuccessNotice).onChange(async (value) => {

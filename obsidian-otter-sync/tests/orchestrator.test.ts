@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 
 import { DEFAULT_DIAGNOSTICS, type DiagnosticsState, type RunRecord } from '../src/diagnostics'
 import { DEFAULT_SETTINGS } from '../src/settings'
@@ -521,6 +524,63 @@ describe('sync orchestrator', () => {
     })
     await expect(bridgeFailureOrchestrator.runSync('manual')).rejects.toThrow('bridge failed')
     expect(bridgeFailurePlugin.state.lastCleanSyncTime).toBeNull()
+  })
+
+  it('deletes the bridge payload file only after successful processing when cleanup is enabled', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'otter-sync-orchestrator-'))
+    const payloadPath = path.join(tempDir, 'payload.json')
+    await writeFile(payloadPath, '{}', 'utf8')
+
+    const plugin = makePlugin({
+      settings: {
+        deletePayloadFilesAfterSync: true,
+      },
+    })
+    const orchestrator = createSyncOrchestrator(plugin, {
+      notify: () => undefined,
+      runBridgeCommand: vi.fn().mockResolvedValue({
+        payload: buildPayload(),
+        stdout: JSON.stringify({ payload_path: payloadPath }),
+        stderr: '',
+        exitCode: 0,
+      }),
+      synchronizeNotes: vi.fn().mockResolvedValue({ notes: [], diagnostics: [], stopped: false }),
+    })
+
+    await orchestrator.runSync('manual')
+
+    await expect(access(payloadPath)).rejects.toThrow()
+
+    await writeFile(payloadPath, '{}', 'utf8')
+
+    const failingOrchestrator = createSyncOrchestrator(plugin, {
+      notify: () => undefined,
+      runBridgeCommand: vi.fn().mockResolvedValue({
+        payload: buildPayload(),
+        stdout: JSON.stringify({ payload_path: payloadPath }),
+        stderr: '',
+        exitCode: 0,
+      }),
+      synchronizeNotes: vi.fn().mockResolvedValue({
+        notes: [
+          {
+            otid: 'speech-1',
+            status: 'failed',
+            path: 'Meetings/Daily Standup.md',
+            normalized: false,
+            diagnostics: [{ code: 'unsafe-user-notes', message: 'Vault modify failed' }],
+          },
+        ],
+        diagnostics: [],
+        stopped: false,
+      }),
+    })
+
+    await expect(failingOrchestrator.runSync('manual')).rejects.toThrow('Vault modify failed')
+
+    await expect(access(payloadPath)).resolves.toBeUndefined()
+
+    await rm(tempDir, { recursive: true, force: true })
   })
 
   it('replays pending retries and merges by otid with the freshest modified_time', async () => {

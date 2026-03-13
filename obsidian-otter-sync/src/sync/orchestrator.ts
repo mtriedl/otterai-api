@@ -1,4 +1,5 @@
 import { Notice } from 'obsidian'
+import { unlink } from 'node:fs/promises'
 
 import { recordRunResult, type NoteFailureRecord, type RunCounts, type RunRecord } from '../diagnostics'
 import { getRequiredSyncSettingsError, type OtterSyncSettings } from '../settings'
@@ -49,6 +50,10 @@ interface ComputeSinceOptions {
   nowSeconds: number
   settings: OtterSyncSettings
   state: SyncState
+}
+
+interface BridgeEnvelopeLike {
+  payload_path?: unknown
 }
 
 export interface SyncRunOutcome {
@@ -147,6 +152,35 @@ function clipStderr(stderr: string | undefined): string | null {
   }
 
   return stderr.slice(0, STDERR_SNIPPET_LIMIT)
+}
+
+function getPayloadPath(stdout: string): string | null {
+  try {
+    const envelope = JSON.parse(stdout) as BridgeEnvelopeLike
+    return typeof envelope.payload_path === 'string' && envelope.payload_path.trim() !== '' ? envelope.payload_path : null
+  } catch {
+    return null
+  }
+}
+
+async function cleanupPayloadFileIfNeeded(settings: OtterSyncSettings, stdout: string): Promise<void> {
+  if (!settings.deletePayloadFilesAfterSync) {
+    return
+  }
+
+  const payloadPath = getPayloadPath(stdout)
+
+  if (payloadPath === null) {
+    return
+  }
+
+  try {
+    await unlink(payloadPath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      return
+    }
+  }
 }
 
 export function createSyncOrchestrator(plugin: PluginLike, providedDependencies: Partial<OrchestratorDependencies> = {}) {
@@ -374,6 +408,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
       }
 
       await plugin.updateState({ lastCleanSyncTime: dependencies.now() })
+      await cleanupPayloadFileIfNeeded(plugin.settings, bridgeResult.stdout)
 
       if (isUserInitiated || plugin.settings.showScheduledSuccessNotice) {
         dependencies.notify(`Sync completed: ${summarizeCounts(counts)}`)
