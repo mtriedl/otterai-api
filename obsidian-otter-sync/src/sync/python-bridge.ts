@@ -1,6 +1,12 @@
 import { spawn } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
 
-import { type BridgePayload, PythonBridgeSchemaError, validateBridgePayload } from './schema'
+import {
+  type BridgePayload,
+  PythonBridgeSchemaError,
+  validateBridgeEnvelope,
+  validateBridgePayload,
+} from './schema'
 
 export interface ShellSpec {
   command: string
@@ -82,6 +88,16 @@ export class PythonBridgeTimeoutError extends PythonBridgeExecutionError {
   constructor(message: string, details: PythonBridgeExecutionDetails) {
     super('PythonBridgeTimeoutError', message, details)
   }
+}
+
+function attachSchemaErrorDetails(
+  error: PythonBridgeSchemaError,
+  details: { stderr: string; stdout: string; exitCode: number | null },
+): PythonBridgeSchemaError {
+  error.stderr = details.stderr
+  error.stdout = details.stdout
+  error.exitCode = details.exitCode
+  return error
 }
 
 const DEFAULT_TIMEOUT_MS = 60_000
@@ -233,7 +249,7 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
       )
     })
 
-    child.once('close', (exitCode) => {
+    child.once('close', async (exitCode) => {
       exited = true
       clearTimeout(timeout)
 
@@ -261,9 +277,9 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
         return
       }
 
-      let parsed: unknown
+      let parsedEnvelope: unknown
       try {
-        parsed = JSON.parse(stdout)
+        parsedEnvelope = JSON.parse(stdout)
       } catch (error) {
         reject(
           new PythonBridgeInvalidJsonError(`Python bridge command emitted invalid JSON: ${(error as Error).message}`, {
@@ -277,7 +293,28 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
       }
 
       try {
-        const payload = validateBridgePayload(parsed)
+        const envelope = validateBridgeEnvelope(parsedEnvelope)
+        const payloadText = await readFile(envelope.payload_path, 'utf8')
+
+        let parsedPayload: unknown
+        try {
+          parsedPayload = JSON.parse(payloadText)
+        } catch (error) {
+          reject(
+            new PythonBridgeInvalidJsonError(
+              `Python bridge payload file contained invalid JSON: ${(error as Error).message}`,
+              {
+                stderr,
+                stdout,
+                exitCode,
+                childPid: child.pid ?? null,
+              },
+            ),
+          )
+          return
+        }
+
+        const payload = validateBridgePayload(parsedPayload)
         resolve({
           payload,
           stdout,
@@ -286,12 +323,21 @@ export async function runBridgeCommand(options: RunBridgeCommandOptions): Promis
         })
       } catch (error) {
         if (error instanceof PythonBridgeSchemaError) {
-          error.stderr = stderr
-          error.stdout = stdout
-          error.exitCode = exitCode
+          reject(attachSchemaErrorDetails(error, { stderr, stdout, exitCode }))
+          return
         }
 
-        reject(error)
+        reject(
+          new PythonBridgeExitError(
+            `Failed to load Python bridge payload file: ${(error as Error).message}`,
+            {
+              stderr,
+              stdout,
+              exitCode,
+              childPid: child.pid ?? null,
+            },
+          ),
+        )
       }
     })
   })

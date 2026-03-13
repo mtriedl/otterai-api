@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
@@ -169,6 +169,31 @@ if (scenario === 'success') {
   process.exit(0)
 }
 
+if (scenario === 'envelope-success') {
+  const fixture = JSON.parse(await readFile(fixtureFile, 'utf8'))
+  const payloadPath = fixtureFile.replace('.json', '-payload.json')
+  await writeFile(payloadPath, JSON.stringify(fixture), 'utf8')
+  process.stderr.write(\`stderr for \${since} in \${mode}\`)
+  process.stdout.write(JSON.stringify({ payload_path: payloadPath, fetched_until: fixture.fetched_until, speech_count: fixture.speeches.length }))
+  process.exit(0)
+}
+
+if (scenario === 'envelope-invalid-payload-json') {
+  const payloadPath = fixtureFile.replace('.json', '-payload-invalid.json')
+  await writeFile(payloadPath, '{not valid json', 'utf8')
+  process.stderr.write('payload json stderr')
+  process.stdout.write(JSON.stringify({ payload_path: payloadPath, fetched_until: 1773246769, speech_count: 0 }))
+  process.exit(0)
+}
+
+if (scenario === 'envelope-malformed-payload') {
+  const payloadPath = fixtureFile.replace('.json', '-payload-malformed.json')
+  await writeFile(payloadPath, JSON.stringify({ fetched_until: 1773246769, speeches: [{ otid: '', source_url: 'https://otter.ai/u/1', title: '', created_at: 1, modified_time: 2, attendees: [], summary_markdown: '', transcript_segments: [] }] }), 'utf8')
+  process.stderr.write('payload schema stderr')
+  process.stdout.write(JSON.stringify({ payload_path: payloadPath, fetched_until: 1773246769, speech_count: 1 }))
+  process.exit(0)
+}
+
 if (scenario === 'invalid-json') {
   process.stderr.write('not json stderr')
   process.stdout.write('not valid json')
@@ -222,8 +247,8 @@ if (scenario === 'wrapper-child') {
     }
   })
 
-  function makeTemplate(scenario: string): string {
-    return `"${process.execPath}" "${harnessPath}" ${scenario} "${fixturePath}" {since} {mode}`
+  function makeTemplate(scenario: string, dataPath: string = fixturePath): string {
+    return `"${process.execPath}" "${harnessPath}" ${scenario} "${dataPath}" {since} {mode}`
   }
 
   function makeExecTemplate(scenario: string, dataPath: string): string {
@@ -293,19 +318,54 @@ if (scenario === 'wrapper-child') {
     throw new Error('Expected runBridgeCommand to time out')
   }
 
-  it('captures stdout, stderr, exit code, and the validated payload', async () => {
+  it('loads the validated payload from the stdout envelope payload_path', async () => {
+    const successPayloadPath = path.join(tempDir, 'success-payload-source.json')
+    await writeFile(successPayloadPath, await readFile(fixturePath, 'utf8'), 'utf8')
+
     const result = await runBridgeCommand({
-      commandTemplate: makeTemplate('success'),
+      commandTemplate: makeTemplate('envelope-success', successPayloadPath),
       since: '1773246700',
       mode: 'manual',
     })
 
     expect(result.exitCode).toBe(0)
     expect(result.stderr).toBe('stderr for 1773246700 in manual')
-    expect(result.stdout).toContain('fetched_until')
+    expect(result.stdout).toContain('payload_path')
+    expect(result.stdout).not.toContain('Daily Standup')
     expect(result.payload).toMatchObject({
       fetched_until: 1773246769,
     })
+  })
+
+  it('keeps the payload file when payload loading fails after envelope parsing', async () => {
+    const invalidPayloadPath = path.join(tempDir, 'invalid-payload-source.json')
+    const malformedPayloadPath = path.join(tempDir, 'malformed-payload-source.json')
+
+    await expect(
+      runBridgeCommand({
+        commandTemplate: makeTemplate('envelope-invalid-payload-json', invalidPayloadPath),
+        since: '1773246700',
+        mode: 'manual',
+      }),
+    ).rejects.toMatchObject({
+      name: 'PythonBridgeInvalidJsonError',
+      stderr: 'payload json stderr',
+      exitCode: 0,
+    })
+    await expect(access(invalidPayloadPath.replace('.json', '-payload-invalid.json'))).resolves.toBeUndefined()
+
+    await expect(
+      runBridgeCommand({
+        commandTemplate: makeTemplate('envelope-malformed-payload', malformedPayloadPath),
+        since: '1773246700',
+        mode: 'manual',
+      }),
+    ).rejects.toMatchObject({
+      name: 'PythonBridgeSchemaError',
+      stderr: 'payload schema stderr',
+      exitCode: 0,
+    })
+    await expect(access(malformedPayloadPath.replace('.json', '-payload-malformed.json'))).resolves.toBeUndefined()
   })
 
   it('rejects invalid JSON distinctly from schema validation failures', async () => {

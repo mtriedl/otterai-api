@@ -20,6 +20,12 @@ export interface BridgePayload {
   speeches: BridgeSpeech[]
 }
 
+export interface BridgeEnvelope {
+  payload_path: string
+  fetched_until: number
+  speech_count: number
+}
+
 export class PythonBridgeSchemaError extends Error {
   stderr?: string
   stdout?: string
@@ -120,5 +126,17 @@ export function validateBridgePayload(payload: unknown): BridgePayload {
         }),
       }
     }),
+  }
+}
+
+export function validateBridgeEnvelope(payload: unknown): BridgeEnvelope {
+  if (!isRecord(payload)) {
+    throw new PythonBridgeSchemaError('Bridge envelope must be a JSON object')
+  }
+
+  return {
+    payload_path: requireNonEmptyString(payload.payload_path, 'payload_path'),
+    fetched_until: requireInteger(payload.fetched_until, 'fetched_until'),
+    speech_count: requireInteger(payload.speech_count, 'speech_count'),
   }
 }
