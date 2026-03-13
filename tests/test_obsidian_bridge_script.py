@@ -181,3 +181,57 @@ def test_build_payload_normalizes_speech_detail_into_plugin_schema(monkeypatch):
         }
     ]
     mock_client.get_speech.assert_called_once_with("otter-123")
+
+
+def test_build_payload_falls_back_from_invalid_detail_values(monkeypatch):
+    bridge = load_bridge_module()
+    mock_client = MagicMock()
+    mock_client.get_speeches.return_value = {
+        "status": 200,
+        "data": {
+            "speeches": [
+                {
+                    "otid": "otter-456",
+                    "title": "Fallback Meeting",
+                    "created_at": 1710000100,
+                    "modified_time": 1710000200,
+                    "summary": [{"text": "Summary from list data"}],
+                }
+            ]
+        },
+    }
+    mock_client.get_speech.return_value = {
+        "status": 200,
+        "data": {
+            "speech": {
+                "otid": "otter-456",
+                "created_at": None,
+                "modified_time": None,
+                "summary": None,
+                "transcripts": [
+                    {
+                        "speaker_name": "Ada",
+                        "start_time": 5,
+                        "transcript": None,
+                    }
+                ],
+            }
+        },
+    }
+
+    monkeypatch.setattr(
+        bridge, "get_authenticated_client", lambda: mock_client, raising=False
+    )
+
+    payload = bridge.build_payload(1710000001)
+
+    assert payload["speeches"][0]["created_at"] == 1710000100
+    assert payload["speeches"][0]["modified_time"] == 1710000200
+    assert payload["speeches"][0]["summary_markdown"] == "- Summary from list data"
+    assert payload["speeches"][0]["transcript_segments"] == [
+        {
+            "speaker_name": "Ada",
+            "timestamp": "0:05",
+            "text": "",
+        }
+    ]

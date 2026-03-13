@@ -20,6 +20,23 @@ def _coerce_int(value, default=0):
         return default
 
 
+def _try_int(value):
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_valid_int(*values, default=0):
+    for value in values:
+        parsed = _try_int(value)
+        if parsed is not None:
+            return parsed
+    return default
+
+
 def _first_non_empty_string(*values):
     for value in values:
         if isinstance(value, str):
@@ -74,6 +91,22 @@ def _normalize_summary_markdown(summary_value):
     return "\n".join(lines)
 
 
+def _normalize_summary_from_sources(summary_speech, detail_speech):
+    for source in (detail_speech, summary_speech):
+        normalized = _normalize_summary_markdown(source.get("summary"))
+        if normalized:
+            return normalized
+    return ""
+
+
+def _normalize_segment_text(transcript):
+    for key in ("transcript", "text"):
+        value = transcript.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
 def _format_segment_timestamp(value):
     if isinstance(value, str):
         stripped = value.strip()
@@ -102,7 +135,7 @@ def _normalize_transcript_segments(detail_speech):
                 "timestamp": _format_segment_timestamp(
                     transcript.get("timestamp", transcript.get("start_time"))
                 ),
-                "text": transcript.get("transcript", transcript.get("text", "")),
+                "text": _normalize_segment_text(transcript),
             }
         )
     return segments
@@ -112,11 +145,11 @@ def normalize_speech(summary_speech, detail_speech):
     otid = _first_non_empty_string(
         detail_speech.get("otid"), summary_speech.get("otid")
     )
-    created_at = _coerce_int(
-        detail_speech.get("created_at", summary_speech.get("created_at"))
+    created_at = _first_valid_int(
+        detail_speech.get("created_at"), summary_speech.get("created_at")
     )
-    modified_time = _coerce_int(
-        detail_speech.get("modified_time", summary_speech.get("modified_time"))
+    modified_time = _first_valid_int(
+        detail_speech.get("modified_time"), summary_speech.get("modified_time")
     )
 
     return {
@@ -132,8 +165,8 @@ def normalize_speech(summary_speech, detail_speech):
         "created_at": created_at,
         "modified_time": modified_time,
         "attendees": _normalize_attendees(summary_speech, detail_speech),
-        "summary_markdown": _normalize_summary_markdown(
-            detail_speech.get("summary", summary_speech.get("summary"))
+        "summary_markdown": _normalize_summary_from_sources(
+            summary_speech, detail_speech
         ),
         "transcript_segments": _normalize_transcript_segments(detail_speech),
     }
