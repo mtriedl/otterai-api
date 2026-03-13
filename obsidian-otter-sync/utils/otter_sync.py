@@ -107,6 +107,10 @@ def _normalize_segment_text(transcript):
     return ""
 
 
+def _log_skip(otid, reason):
+    print(f"Skipping speech {otid}: {reason}", file=sys.stderr)
+
+
 def _fetch_incremental_speeches(client, since):
     speeches = []
     last_load_ts = None
@@ -210,14 +214,24 @@ def build_payload(since, fetched_until=None):
     for summary_speech in speeches:
         otid = _first_non_empty_string(summary_speech.get("otid"))
         if not otid:
+            _log_skip("<missing otid>", "missing speech identifier")
             continue
 
-        detail_result = client.get_speech(otid)
+        try:
+            detail_result = client.get_speech(otid)
+        except Exception as exc:
+            _log_skip(otid, exc)
+            continue
+
         if detail_result.get("status") != 200:
+            _log_skip(otid, f"detail fetch failed: {detail_result}")
             continue
 
         detail_speech = detail_result.get("data", {}).get("speech", {})
-        normalized_speeches.append(normalize_speech(summary_speech, detail_speech))
+        try:
+            normalized_speeches.append(normalize_speech(summary_speech, detail_speech))
+        except Exception as exc:
+            _log_skip(otid, exc)
 
     return {"fetched_until": fetched_until, "speeches": normalized_speeches}
 

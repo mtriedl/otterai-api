@@ -314,3 +314,104 @@ def test_build_payload_fetches_all_incremental_pages(monkeypatch):
         call(modified_after=1710000001),
         call(modified_after=1710000001, last_load_ts=1710000100),
     ]
+
+
+def test_build_payload_skips_speech_when_detail_fetch_raises_and_logs_error(
+    monkeypatch, capsys
+):
+    bridge = load_bridge_module()
+    mock_client = MagicMock()
+    mock_client.get_speeches.return_value = {
+        "status": 200,
+        "data": {
+            "speeches": [
+                {"otid": "otter-bad", "title": "Bad Speech"},
+                {"otid": "otter-good", "title": "Good Speech"},
+            ]
+        },
+    }
+    mock_client.get_speech.side_effect = [
+        RuntimeError("detail exploded"),
+        {
+            "status": 200,
+            "data": {
+                "speech": {
+                    "otid": "otter-good",
+                    "title": "Good Speech",
+                    "created_at": 1710000003,
+                    "modified_time": 1710000004,
+                    "summary": [],
+                    "transcripts": [],
+                }
+            },
+        },
+    ]
+
+    monkeypatch.setattr(
+        bridge, "get_authenticated_client", lambda: mock_client, raising=False
+    )
+
+    payload = bridge.build_payload(1710000001)
+
+    assert [speech["otid"] for speech in payload["speeches"]] == ["otter-good"]
+    captured = capsys.readouterr()
+    assert "Skipping speech otter-bad" in captured.err
+    assert "detail exploded" in captured.err
+
+
+def test_build_payload_skips_speech_when_normalization_raises_and_logs_error(
+    monkeypatch, capsys
+):
+    bridge = load_bridge_module()
+    mock_client = MagicMock()
+    mock_client.get_speeches.return_value = {
+        "status": 200,
+        "data": {
+            "speeches": [
+                {"otid": "otter-bad", "title": "Bad Speech"},
+                {"otid": "otter-good", "title": "Good Speech"},
+            ]
+        },
+    }
+    mock_client.get_speech.side_effect = [
+        {"status": 200, "data": {"speech": {"otid": "otter-bad"}}},
+        {
+            "status": 200,
+            "data": {
+                "speech": {
+                    "otid": "otter-good",
+                    "title": "Good Speech",
+                    "created_at": 1710000003,
+                    "modified_time": 1710000004,
+                    "summary": [],
+                    "transcripts": [],
+                }
+            },
+        },
+    ]
+
+    def fake_normalize(summary_speech, detail_speech):
+        if detail_speech.get("otid") == "otter-bad":
+            raise ValueError("bad detail shape")
+        return {
+            "otid": summary_speech["otid"],
+            "source_url": f"https://otter.ai/u/{summary_speech['otid']}",
+            "title": summary_speech["title"],
+            "created_at": detail_speech["created_at"],
+            "modified_time": detail_speech["modified_time"],
+            "attendees": [],
+            "summary_markdown": "",
+            "transcript_segments": [],
+        }
+
+    monkeypatch.setattr(
+        bridge, "get_authenticated_client", lambda: mock_client, raising=False
+    )
+    monkeypatch.setattr(bridge, "normalize_speech", fake_normalize)
+
+    payload = bridge.build_payload(1710000001)
+
+    assert [speech["otid"] for speech in payload["speeches"]] == ["otter-good"]
+    captured = capsys.readouterr()
+    assert "Skipping speech otter-bad" in captured.err
+    assert "bad detail shape" in captured.err
