@@ -17,8 +17,10 @@ import type { BridgeSpeech } from './schema'
 const ONE_DAY_SECONDS = 86_400
 const STDERR_SNIPPET_LIMIT = 500
 
+type SynchronizerApp = Parameters<typeof synchronizeNotes>[0]['app']
+
 interface PluginLike {
-  app: unknown
+  app: SynchronizerApp
   settings: OtterSyncSettings
   state: SyncState
   diagnostics: {
@@ -39,11 +41,7 @@ interface OrchestratorDependencies {
     since: string
     mode: BridgeMode
   }) => Promise<RunBridgeCommandResult>
-  synchronizeNotes: (options: {
-    app: unknown
-    destinationFolder: string
-    speeches: BridgeSpeech[]
-  }) => Promise<SynchronizeNotesResult>
+  synchronizeNotes: typeof synchronizeNotes
 }
 
 interface ComputeSinceOptions {
@@ -230,7 +228,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
       })
 
       if (!plugin.isLocalProcessExecutionAvailable()) {
-        await failRun(
+        return await failRun(
           mode,
           startedAtIso,
           fetchWatermarkUsed,
@@ -244,17 +242,14 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         dependencies.notify('Fetching Otter meetings...')
       }
 
-      let bridgeResult: RunBridgeCommandResult
-      try {
-        bridgeResult = await dependencies.runBridgeCommand({
-          commandTemplate: plugin.settings.commandTemplate,
-          since: String(fetchWatermarkUsed),
-          mode,
-        })
-      } catch (error) {
+      const bridgeResult = await dependencies.runBridgeCommand({
+        commandTemplate: plugin.settings.commandTemplate,
+        since: String(fetchWatermarkUsed),
+        mode,
+      }).catch(async (error: unknown) => {
         const bridgeError = error as Error & { stderr?: string; exitCode?: number | null }
-        await failRun(mode, startedAtIso, fetchWatermarkUsed, commandSummary, bridgeError)
-      }
+        return await failRun(mode, startedAtIso, fetchWatermarkUsed, commandSummary, bridgeError)
+      })
 
       await plugin.updateState({ lastFetchWatermark: bridgeResult.payload.fetched_until })
 
@@ -270,15 +265,11 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
 
       const speechesByOtid = new Map(mergedSpeeches.map((speech) => [speech.otid, speech]))
       const attemptedAt = new Date(dependencies.now()).toISOString()
-      let noteResult: SynchronizeNotesResult
-
-      try {
-        noteResult = await dependencies.synchronizeNotes({
-          app: plugin.app,
-          destinationFolder: plugin.settings.destinationFolder,
-          speeches: mergedSpeeches,
-        })
-      } catch (error) {
+      const noteResult = await dependencies.synchronizeNotes({
+        app: plugin.app,
+        destinationFolder: plugin.settings.destinationFolder,
+        speeches: mergedSpeeches,
+      }).catch(async (error: unknown) => {
         let pendingRetries = plugin.state.pendingRetries
         const noteSyncError = error as Error & { stderr?: string; exitCode?: number | null }
 
@@ -287,7 +278,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         }
 
         await plugin.updateState({ pendingRetries })
-        await failRun(
+        return await failRun(
           mode,
           startedAtIso,
           fetchWatermarkUsed,
@@ -302,7 +293,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
           hadPendingRetries,
           bridgeResult.payload.speeches.length,
         )
-      }
+      })
 
       const counts = buildCounts(noteResult.notes)
       const noteFailures = buildNoteFailures(noteResult.notes, speechesByOtid)
@@ -373,11 +364,13 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         dependencies.notify(`Sync completed: ${summarizeCounts(counts)}`)
       }
 
-      return {
+      const outcome: SyncRunOutcome = {
         status: 'success',
         counts,
         fetchedUntil: bridgeResult.payload.fetched_until,
       }
+
+      return outcome
     })()
 
     activeRun = runPromise

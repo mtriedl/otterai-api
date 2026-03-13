@@ -25,7 +25,7 @@ export class Plugin {
 export class PluginSettingTab {
   containerEl = {
     children: [] as unknown[],
-    emptied: false,
+    emptied: false as boolean | undefined,
     replaceChildren: (...children: unknown[]) => {
       this.containerEl.children = [...children]
     },

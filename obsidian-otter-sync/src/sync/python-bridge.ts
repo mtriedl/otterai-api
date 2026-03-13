@@ -59,20 +59,27 @@ class PythonBridgeExecutionError extends Error {
   }
 }
 
+interface PythonBridgeExecutionDetails {
+  stderr: string
+  stdout: string
+  exitCode: number | null
+  childPid: number | null
+}
+
 export class PythonBridgeInvalidJsonError extends PythonBridgeExecutionError {
-  constructor(message: string, details: { stderr: string; stdout: string; exitCode: number | null }) {
+  constructor(message: string, details: PythonBridgeExecutionDetails) {
     super('PythonBridgeInvalidJsonError', message, details)
   }
 }
 
 export class PythonBridgeExitError extends PythonBridgeExecutionError {
-  constructor(message: string, details: { stderr: string; stdout: string; exitCode: number | null }) {
+  constructor(message: string, details: PythonBridgeExecutionDetails) {
     super('PythonBridgeExitError', message, details)
   }
 }
 
 export class PythonBridgeTimeoutError extends PythonBridgeExecutionError {
-  constructor(message: string, details: { stderr: string; stdout: string; exitCode: number | null }) {
+  constructor(message: string, details: PythonBridgeExecutionDetails) {
     super('PythonBridgeTimeoutError', message, details)
   }
 }

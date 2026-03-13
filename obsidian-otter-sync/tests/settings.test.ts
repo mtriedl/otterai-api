@@ -129,11 +129,46 @@ describe('DEFAULT_SETTINGS', () => {
     await secondPlugin.loadState()
     await secondPlugin.loadDiagnostics()
 
-    firstPlugin.state.pendingRetries.push({ retry: 1 })
-    firstPlugin.diagnostics.recentRuns.push({ run: 1 })
+    firstPlugin.state.pendingRetries.push({
+      otid: 'speech-1',
+      source_url: 'https://otter.ai/u/speech-1',
+      title: 'Retry me',
+      created_at: 1,
+      modified_time: 2,
+      attendees: [],
+      summary_markdown: '',
+      transcript_segments: [],
+      failure_reason: 'retry',
+      last_attempted_at: '2026-03-12T10:00:00.000Z',
+    })
+    firstPlugin.diagnostics.recentRuns.push({
+      runMode: 'manual',
+      startedAt: '2026-03-12T10:00:00.000Z',
+      endedAt: '2026-03-12T10:00:01.000Z',
+      fetchWatermarkUsed: null,
+      fetchedUntil: null,
+      retryReplay: false,
+      counts: { created: 0, updated: 0, skipped: 0, failed: 0 },
+      commandSummary: {
+        configured: false,
+        hasQuotedPlaceholders: false,
+        hasSincePlaceholder: false,
+        hasModePlaceholder: false,
+        shell: { command: '/bin/sh', args: ['-lc'] },
+      },
+      exitCode: null,
+      stderrSnippet: null,
+      speechCount: 0,
+      errorSummary: null,
+      noteFailures: [],
+    })
 
-    expect(firstPlugin.state.pendingRetries).toEqual([{ retry: 1 }])
-    expect(firstPlugin.diagnostics.recentRuns).toEqual([{ run: 1 }])
+    expect(firstPlugin.state.pendingRetries).toEqual([
+      expect.objectContaining({ otid: 'speech-1', failure_reason: 'retry' }),
+    ])
+    expect(firstPlugin.diagnostics.recentRuns).toEqual([
+      expect.objectContaining({ runMode: 'manual', speechCount: 0 }),
+    ])
     expect(secondPlugin.state.pendingRetries).toEqual([])
     expect(secondPlugin.diagnostics.recentRuns).toEqual([])
     expect(DEFAULT_SYNC_STATE.pendingRetries).toEqual([])

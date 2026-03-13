@@ -1,4 +1,4 @@
-import type { PluginManifest } from 'obsidian'
+import type { App, PluginManifest } from 'obsidian'
 
 export interface FakeFile {
   path: string
@@ -29,7 +29,7 @@ export interface FakeApp {
   existingFolders: Set<string>
 }
 
-export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp {
+export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp & App {
   const fileContents = new Map<string, string>()
   const createdFolders: string[] = []
   const failCreateFolderFor = new Set<string>()
@@ -108,7 +108,7 @@ export function createFakeApp(overrides: Partial<FakeApp> = {}): FakeApp {
     failCreateFolderFor,
     existingFolders,
     ...overrides,
-  }
+  } as FakeApp & App
 }
 
 export function createFakeManifest(): PluginManifest {

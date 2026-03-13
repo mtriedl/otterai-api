@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { DEFAULT_DIAGNOSTICS } from '../src/diagnostics'
+import { DEFAULT_DIAGNOSTICS, type DiagnosticsState, type RunRecord } from '../src/diagnostics'
 import { DEFAULT_SETTINGS } from '../src/settings'
 import { DEFAULT_SYNC_STATE, type RetryEntry, type SyncState } from '../src/state'
 import type { BridgePayload, BridgeSpeech } from '../src/sync/schema'
@@ -46,7 +46,16 @@ function buildRetryEntry(overrides: Partial<RetryEntry> = {}): RetryEntry {
 }
 
 function makePlugin(overrides: { state?: Partial<SyncState>; settings?: Partial<typeof DEFAULT_SETTINGS>; available?: boolean } = {}) {
-  const plugin = {
+  const plugin: {
+    app: ReturnType<typeof createFakeApp>
+    settings: typeof DEFAULT_SETTINGS
+    state: SyncState
+    diagnostics: DiagnosticsState
+    updateState(update: Partial<SyncState>): Promise<void>
+    updateDiagnostics(update: Partial<DiagnosticsState>): Promise<void>
+    isLocalProcessExecutionAvailable(): boolean
+    addCommand: ReturnType<typeof vi.fn>
+  } = {
     app: createFakeApp(),
     settings: {
       ...DEFAULT_SETTINGS,
@@ -59,7 +68,7 @@ function makePlugin(overrides: { state?: Partial<SyncState>; settings?: Partial<
       ...overrides.state,
       pendingRetries: [...(overrides.state?.pendingRetries ?? DEFAULT_SYNC_STATE.pendingRetries)],
     },
-    diagnostics: { ...DEFAULT_DIAGNOSTICS, recentRuns: [] },
+    diagnostics: { ...DEFAULT_DIAGNOSTICS, recentRuns: [] as RunRecord[] },
     async updateState(update: Partial<SyncState>) {
       this.state = {
         ...this.state,
@@ -67,7 +76,7 @@ function makePlugin(overrides: { state?: Partial<SyncState>; settings?: Partial<
         pendingRetries: [...(update.pendingRetries ?? this.state.pendingRetries)],
       }
     },
-    async updateDiagnostics(update: Partial<typeof DEFAULT_DIAGNOSTICS>) {
+    async updateDiagnostics(update: Partial<DiagnosticsState>) {
       this.diagnostics = {
         ...this.diagnostics,
         ...update,
@@ -570,7 +579,7 @@ describe('plugin integration', () => {
   it('registers sync commands on load, runs an immediate scheduled sync, and starts then clears interval scheduling when required settings are configured', async () => {
     await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
-    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest()) as OtterSyncPlugin & {
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest()) as InstanceType<typeof OtterSyncPlugin> & {
       addCommand: ReturnType<typeof vi.fn>
     }
     plugin.addCommand = vi.fn()
@@ -608,7 +617,7 @@ describe('plugin integration', () => {
   it('skips scheduled startup work when required settings are blank', async () => {
     await ensureTestObsidianModule()
     const { default: OtterSyncPlugin } = await import('../src/main')
-    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest()) as OtterSyncPlugin & {
+    const plugin = new OtterSyncPlugin(createFakeApp(), createFakeManifest()) as InstanceType<typeof OtterSyncPlugin> & {
       addCommand: ReturnType<typeof vi.fn>
     }
     plugin.addCommand = vi.fn()

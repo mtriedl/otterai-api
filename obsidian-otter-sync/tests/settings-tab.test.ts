@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PluginSettingTab, RecordedSetting } from './helpers/obsidian'
+import type { RecordedSetting } from './helpers/obsidian'
 
 import { DEFAULT_DIAGNOSTICS } from '../src/diagnostics'
 import { DEFAULT_SETTINGS } from '../src/settings'
@@ -7,11 +7,17 @@ import { DEFAULT_SYNC_STATE } from '../src/state'
 import { createFakeApp, createFakeManifest } from './helpers/fake-app'
 import { ensureTestObsidianModule, restoreTestObsidianModule } from './helpers/register-obsidian'
 
-function getRecordedSettings(tab: PluginSettingTab): RecordedSetting[] {
-  return tab.containerEl.children as RecordedSetting[]
+type RecordedTabLike = {
+  containerEl: {
+    children: ArrayLike<unknown>
+  }
 }
 
-function getRecordedSetting(tab: PluginSettingTab, name: string): RecordedSetting {
+function getRecordedSettings(tab: RecordedTabLike): RecordedSetting[] {
+  return Array.from(tab.containerEl.children) as RecordedSetting[]
+}
+
+function getRecordedSetting(tab: RecordedTabLike, name: string): RecordedSetting {
   const setting = getRecordedSettings(tab).find((item) => item.name === name)
 
   if (!setting) {
@@ -44,7 +50,29 @@ describe('OtterSync settings tab', () => {
     plugin.diagnostics = {
       ...DEFAULT_DIAGNOSTICS,
       lastErrorSummary: 'Latest sync failed',
-      recentRuns: [{ status: 'ok' }],
+      recentRuns: [
+        {
+          runMode: 'manual',
+          startedAt: '2026-03-10T11:00:00.000Z',
+          endedAt: '2026-03-10T11:00:01.000Z',
+          fetchWatermarkUsed: null,
+          fetchedUntil: null,
+          retryReplay: false,
+          counts: { created: 0, updated: 0, skipped: 0, failed: 0 },
+          commandSummary: {
+            configured: false,
+            hasQuotedPlaceholders: false,
+            hasSincePlaceholder: false,
+            hasModePlaceholder: false,
+            shell: { command: '/bin/sh', args: ['-lc'] },
+          },
+          exitCode: null,
+          stderrSnippet: null,
+          speechCount: 0,
+          errorSummary: null,
+          noteFailures: [],
+        },
+      ],
     }
 
     const { OtterSyncSettingTab } = await import('../src/settings-tab')

@@ -59,7 +59,7 @@ function requireInteger(value: unknown, path: string): number {
     throw new PythonBridgeSchemaError(`${path} must be an integer`)
   }
 
-  return value
+  return value as number
 }
 
 export function validateBridgePayload(payload: unknown): BridgePayload {
