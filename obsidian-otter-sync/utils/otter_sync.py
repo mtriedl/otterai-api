@@ -180,6 +180,14 @@ def _render_outline(speech_outline):
     return "\n\n".join(sections)
 
 
+def _assemble_summary_markdown(abstract_data, action_items_data, speech_outline):
+    """Combine all three summary sources into a single markdown string."""
+    prose = _render_abstract_summary(abstract_data)
+    action_items = _render_action_items(action_items_data)
+    outline = _render_outline(speech_outline)
+    return f"{prose}\n\n## Action Items\n\n{action_items}\n\n## Outline\n\n{outline}"
+
+
 def _parse_summary(value):
     """Convert an API summary value (str, dict, or list) to markdown."""
     if isinstance(value, str):

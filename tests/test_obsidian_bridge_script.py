@@ -750,3 +750,50 @@ def test_render_outline_handles_parent_with_null_segments():
         "### Full Section\n\n"
         "- Has content."
     )
+
+
+def test_assemble_summary_markdown_all_sections():
+    bridge = load_bridge_module()
+    abstract_data = {
+        "process_status": "finished",
+        "abstract_summary": {
+            "short_summary": "The team discussed project timelines.",
+        },
+    }
+    action_items_data = {
+        "process_status": "finished",
+        "speech_action_items": [
+            {
+                "text": "Send the report",
+                "assignee": {"name": "Ada Lovelace"},
+                "completed": False,
+            },
+        ],
+    }
+    speech_outline = [
+        {
+            "text": "Project Review",
+            "segments": [{"text": "Reviewed the roadmap."}],
+        },
+    ]
+    result = bridge._assemble_summary_markdown(abstract_data, action_items_data, speech_outline)
+    assert result == (
+        "The team discussed project timelines.\n\n"
+        "## Action Items\n\n"
+        "- [ ] @Ada Lovelace - Send the report\n\n"
+        "## Outline\n\n"
+        "### Project Review\n\n"
+        "- Reviewed the roadmap."
+    )
+
+
+def test_assemble_summary_markdown_with_placeholders():
+    bridge = load_bridge_module()
+    result = bridge._assemble_summary_markdown(None, None, None)
+    assert result == (
+        "*Summary processing...*\n\n"
+        "## Action Items\n\n"
+        "*Action items processing...*\n\n"
+        "## Outline\n\n"
+        "*Outline processing...*"
+    )
