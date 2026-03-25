@@ -601,3 +601,32 @@ def test_build_payload_filters_out_speeches_older_than_since_after_fetch(
     assert caplog.messages == [
         "Skipping speech otter-old: modified_time 1709999999 is older than since 1710000001"
     ]
+
+
+def test_render_abstract_summary_returns_prose_when_finished():
+    bridge = load_bridge_module()
+    data = {
+        "process_status": "finished",
+        "abstract_summary": {
+            "short_summary": "The team discussed project timelines and deliverables."
+        },
+    }
+    assert bridge._render_abstract_summary(data) == "The team discussed project timelines and deliverables."
+
+
+def test_render_abstract_summary_returns_placeholder_when_not_finished():
+    bridge = load_bridge_module()
+    data = {"process_status": "processing", "abstract_summary": {}}
+    assert bridge._render_abstract_summary(data) == "*Summary processing...*"
+
+
+def test_render_abstract_summary_returns_placeholder_when_summary_missing():
+    bridge = load_bridge_module()
+    data = {"process_status": "finished", "abstract_summary": {}}
+    assert bridge._render_abstract_summary(data) == "*Summary processing...*"
+
+
+def test_render_abstract_summary_returns_placeholder_for_empty_data():
+    bridge = load_bridge_module()
+    assert bridge._render_abstract_summary({}) == "*Summary processing...*"
+    assert bridge._render_abstract_summary(None) == "*Summary processing...*"

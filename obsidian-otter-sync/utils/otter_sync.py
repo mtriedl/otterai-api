@@ -109,6 +109,21 @@ def _parse_attendees(summary, detail):
     return attendees
 
 
+def _render_abstract_summary(data):
+    """Render the abstract summary prose from the API response."""
+    if not isinstance(data, dict):
+        return "*Summary processing...*"
+    if data.get("process_status") != "finished":
+        return "*Summary processing...*"
+    summary = data.get("abstract_summary")
+    if not isinstance(summary, dict):
+        return "*Summary processing...*"
+    text = _safe_str(summary.get("short_summary"))
+    if not text:
+        return "*Summary processing...*"
+    return text
+
+
 def _parse_summary(value):
     """Convert an API summary value (str, dict, or list) to markdown."""
     if isinstance(value, str):
