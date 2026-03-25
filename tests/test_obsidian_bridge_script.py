@@ -797,3 +797,145 @@ def test_assemble_summary_markdown_with_placeholders():
         "## Outline\n\n"
         "*Outline processing...*"
     )
+
+
+def test_build_payload_assembles_enriched_summary_from_three_endpoints(monkeypatch):
+    bridge = load_bridge_module()
+    mock_client = MagicMock()
+    mock_client.get_speeches.return_value = {
+        "status": 200,
+        "data": {
+            "speeches": [
+                {
+                    "otid": "otter-enriched",
+                    "title": "Enriched Meeting",
+                    "created_at": 1710000001,
+                    "modified_time": 1710001801,
+                }
+            ]
+        },
+    }
+    mock_client.get_speech.return_value = {
+        "status": 200,
+        "data": {
+            "speech": {
+                "otid": "otter-enriched",
+                "share_url": "https://otter.ai/u/enriched",
+                "title": "Enriched Meeting",
+                "created_at": 1710000001,
+                "modified_time": 1710001801,
+                "speakers": [{"id": 1, "speaker_name": "Ada"}],
+                "speech_outline": [
+                    {
+                        "text": "Project Status",
+                        "segments": [
+                            {"text": "Ada reviewed the roadmap."},
+                            {"text": "Team confirmed the timeline."},
+                        ],
+                    },
+                ],
+                "transcripts": [
+                    {"speaker_id": 1, "start_offset": 0, "transcript": "Hello."},
+                ],
+            }
+        },
+    }
+    mock_client.get_abstract_summary.return_value = {
+        "status": 200,
+        "data": {
+            "process_status": "finished",
+            "abstract_summary": {
+                "short_summary": "Ada and the team reviewed the project roadmap.",
+            },
+        },
+    }
+    mock_client.get_speech_action_items.return_value = {
+        "status": 200,
+        "data": {
+            "process_status": "finished",
+            "speech_action_items": [
+                {
+                    "text": "Send updated timeline",
+                    "assignee": {"name": "Ada"},
+                    "completed": False,
+                },
+                {
+                    "text": "Archive old docs",
+                    "assignee": None,
+                    "completed": True,
+                },
+            ],
+        },
+    }
+
+    monkeypatch.setattr(
+        bridge, "get_authenticated_client", lambda: mock_client, raising=False
+    )
+
+    payload = bridge.build_payload(1710000001)
+
+    assert len(payload["speeches"]) == 1
+    speech = payload["speeches"][0]
+    assert speech["summary_markdown"] == (
+        "Ada and the team reviewed the project roadmap.\n\n"
+        "## Action Items\n\n"
+        "- [ ] @Ada - Send updated timeline\n"
+        "- [x] Archive old docs\n\n"
+        "## Outline\n\n"
+        "### Project Status\n\n"
+        "- Ada reviewed the roadmap.\n"
+        "- Team confirmed the timeline."
+    )
+    mock_client.get_abstract_summary.assert_called_once_with("otter-enriched")
+    mock_client.get_speech_action_items.assert_called_once_with("otter-enriched")
+
+
+def test_build_payload_degrades_gracefully_when_supplementary_endpoints_fail(
+    monkeypatch, caplog
+):
+    bridge = load_bridge_module()
+    mock_client = MagicMock()
+    mock_client.get_speeches.return_value = {
+        "status": 200,
+        "data": {
+            "speeches": [
+                {
+                    "otid": "otter-degraded",
+                    "title": "Degraded Meeting",
+                    "created_at": 1710000001,
+                    "modified_time": 1710001801,
+                }
+            ]
+        },
+    }
+    mock_client.get_speech.return_value = {
+        "status": 200,
+        "data": {
+            "speech": {
+                "otid": "otter-degraded",
+                "title": "Degraded Meeting",
+                "created_at": 1710000001,
+                "modified_time": 1710001801,
+                "speakers": [],
+                "transcripts": [],
+            }
+        },
+    }
+    mock_client.get_abstract_summary.side_effect = RuntimeError("network error")
+    mock_client.get_speech_action_items.return_value = {
+        "status": 503,
+        "data": {},
+    }
+
+    monkeypatch.setattr(
+        bridge, "get_authenticated_client", lambda: mock_client, raising=False
+    )
+
+    with caplog.at_level(logging.WARNING):
+        payload = bridge.build_payload(1710000001)
+
+    assert len(payload["speeches"]) == 1
+    speech = payload["speeches"][0]
+    assert "*Summary processing...*" in speech["summary_markdown"]
+    assert "*Action items processing...*" in speech["summary_markdown"]
+    assert "*Outline processing...*" in speech["summary_markdown"]

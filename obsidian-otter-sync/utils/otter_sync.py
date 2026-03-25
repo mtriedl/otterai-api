@@ -188,39 +188,6 @@ def _assemble_summary_markdown(abstract_data, action_items_data, speech_outline)
     return f"{prose}\n\n## Action Items\n\n{action_items}\n\n## Outline\n\n{outline}"
 
 
-def _parse_summary(value):
-    """Convert an API summary value (str, dict, or list) to markdown."""
-    if isinstance(value, str):
-        return value.strip()
-
-    if isinstance(value, dict):
-        sections = []
-        for key, heading in (("outline", "Outline"), ("action_items", "Action Items")):
-            section_md = _parse_summary(value.get(key))
-            if section_md:
-                sections.append(f"## {heading}\n{section_md}")
-        return "\n\n".join(sections)
-
-    if isinstance(value, list):
-        lines = []
-        for item in value:
-            if isinstance(item, str):
-                text = item.strip()
-            elif isinstance(item, dict):
-                text = (
-                    _safe_str(item.get("text"))
-                    or _safe_str(item.get("summary"))
-                    or _safe_str(item.get("markdown"))
-                )
-            else:
-                text = ""
-            if text:
-                lines.append(f"- {text}")
-        return "\n".join(lines)
-
-    return ""
-
-
 def _build_speaker_map(detail, summary):
     """Build a speaker_id -> speaker_name mapping from the speakers list."""
     speaker_map = {}
@@ -265,7 +232,7 @@ def _parse_transcript(transcripts, speaker_map=None):
     return segments
 
 
-def parse_speech(summary, detail):
+def parse_speech(summary, detail, summary_markdown=""):
     """Parse raw API summary + detail into the plugin schema.
 
     Prefers detail values, falls back to summary for missing/invalid fields.
@@ -290,7 +257,7 @@ def parse_speech(summary, detail):
         "created_at": _safe_int(detail.get("created_at")) or _safe_int(summary.get("created_at")) or 0,
         "modified_time": _safe_int(detail.get("modified_time")) or _safe_int(summary.get("modified_time")) or 0,
         "attendees": _parse_attendees(summary, detail),
-        "summary_markdown": _parse_summary(detail.get("summary")) or _parse_summary(summary.get("summary")),
+        "summary_markdown": summary_markdown,
         "transcript_segments": _parse_transcript(
             detail.get("transcripts"), _build_speaker_map(detail, summary)
         ),
@@ -326,8 +293,34 @@ def build_payload(since, fetched_until=None):
             continue
 
         detail = detail_result.get("data", {}).get("speech", {})
+
+        # Fetch supplementary endpoints — degrade gracefully on failure
+        abstract_data = None
         try:
-            speech = parse_speech(summary, detail)
+            abstract_result = client.get_abstract_summary(otid)
+            if abstract_result.get("status") == 200:
+                abstract_data = abstract_result.get("data", {})
+            else:
+                LOGGER.warning("Abstract summary fetch returned %s for %s", abstract_result.get("status"), otid)
+        except Exception as exc:
+            LOGGER.warning("Abstract summary fetch failed for %s: %s", otid, exc)
+
+        action_items_data = None
+        try:
+            action_items_result = client.get_speech_action_items(otid)
+            if action_items_result.get("status") == 200:
+                action_items_data = action_items_result.get("data", {})
+            else:
+                LOGGER.warning("Action items fetch returned %s for %s", action_items_result.get("status"), otid)
+        except Exception as exc:
+            LOGGER.warning("Action items fetch failed for %s: %s", otid, exc)
+
+        summary_markdown = _assemble_summary_markdown(
+            abstract_data, action_items_data, detail.get("speech_outline")
+        )
+
+        try:
+            speech = parse_speech(summary, detail, summary_markdown)
         except Exception as exc:
             _log_skip(otid, exc)
             continue
