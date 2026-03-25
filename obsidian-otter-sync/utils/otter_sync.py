@@ -151,6 +151,35 @@ def _render_action_items(data):
     return "\n".join(lines)
 
 
+def _render_outline(speech_outline):
+    """Render the speech outline as markdown headings with bullet children."""
+    if not isinstance(speech_outline, list) or not speech_outline:
+        return "*Outline processing...*"
+    sections = []
+    for parent in speech_outline:
+        if not isinstance(parent, dict):
+            continue
+        heading = _safe_str(parent.get("text"))
+        if not heading:
+            continue
+        parts = [f"### {heading}"]
+        segments = parent.get("segments")
+        if isinstance(segments, list):
+            bullets = []
+            for seg in segments:
+                if not isinstance(seg, dict):
+                    continue
+                seg_text = _safe_str(seg.get("text"))
+                if seg_text:
+                    bullets.append(f"- {seg_text}")
+            if bullets:
+                parts.append("\n".join(bullets))
+        sections.append("\n\n".join(parts))
+    if not sections:
+        return "*Outline processing...*"
+    return "\n\n".join(sections)
+
+
 def _parse_summary(value):
     """Convert an API summary value (str, dict, or list) to markdown."""
     if isinstance(value, str):

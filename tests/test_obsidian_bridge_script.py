@@ -678,3 +678,75 @@ def test_render_action_items_with_empty_array():
     bridge = load_bridge_module()
     data = {"process_status": "finished", "speech_action_items": []}
     assert bridge._render_action_items(data) == "*Action items processing...*"
+
+
+def test_render_outline_with_parent_and_child_segments():
+    bridge = load_bridge_module()
+    speech_outline = [
+        {
+            "text": "Weather and Personal Updates",
+            "segments": [
+                {"text": "Matthew discussed the unpredictable weather."},
+                {"text": "Speaker 1 mentioned weekend plans."},
+            ],
+        },
+        {
+            "text": "Project Status Review",
+            "segments": [
+                {"text": "The team reviewed the roadmap."},
+            ],
+        },
+    ]
+    result = bridge._render_outline(speech_outline)
+    assert result == (
+        "### Weather and Personal Updates\n\n"
+        "- Matthew discussed the unpredictable weather.\n"
+        "- Speaker 1 mentioned weekend plans.\n\n"
+        "### Project Status Review\n\n"
+        "- The team reviewed the roadmap."
+    )
+
+
+def test_render_outline_returns_placeholder_for_empty():
+    bridge = load_bridge_module()
+    assert bridge._render_outline([]) == "*Outline processing...*"
+    assert bridge._render_outline(None) == "*Outline processing...*"
+
+
+def test_render_outline_skips_parents_with_no_text():
+    bridge = load_bridge_module()
+    speech_outline = [
+        {
+            "text": "",
+            "segments": [{"text": "Orphaned segment."}],
+        },
+        {
+            "text": "Valid Section",
+            "segments": [{"text": "Valid content."}],
+        },
+    ]
+    result = bridge._render_outline(speech_outline)
+    assert result == (
+        "### Valid Section\n\n"
+        "- Valid content."
+    )
+
+
+def test_render_outline_handles_parent_with_null_segments():
+    bridge = load_bridge_module()
+    speech_outline = [
+        {
+            "text": "Empty Section",
+            "segments": None,
+        },
+        {
+            "text": "Full Section",
+            "segments": [{"text": "Has content."}],
+        },
+    ]
+    result = bridge._render_outline(speech_outline)
+    assert result == (
+        "### Empty Section\n\n"
+        "### Full Section\n\n"
+        "- Has content."
+    )
