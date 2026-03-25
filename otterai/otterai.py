@@ -146,6 +146,17 @@ class OtterAI:
 
         return self._handle_response(response)
 
+    def get_abstract_summary(self, speech_id):
+        abstract_summary_url = OtterAI.API_BASE_URL + "abstract_summary"
+        if self._is_userid_invalid():
+            raise OtterAIException("userid is invalid")
+
+        payload = {"userid": self._userid, "otid": speech_id}
+
+        response = self._get(abstract_summary_url, params=payload)
+
+        return self._handle_response(response)
+
     def set_speech_title(self, speech_id, title):
         set_title_url = OtterAI.API_BASE_URL + "set_speech_title"
         if self._is_userid_invalid():

@@ -376,6 +376,32 @@ def test_list_folder_speeches_rejects_invalid_inputs():
         otter.list_folder_speeches("folder123", last_load_speech_id=" ")
 
 
+def test_get_abstract_summary_invalid_userid():
+    otter = OtterAI()
+    with pytest.raises(OtterAIException, match="userid is invalid"):
+        otter.get_abstract_summary("dummyid")
+
+
+def test_get_abstract_summary_sends_correct_params():
+    otter = OtterAI()
+    otter._userid = "user123"
+    otter._timeout = 10.0
+
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = {}
+    otter._session = MagicMock()
+    otter._session.get.return_value = response
+
+    otter.get_abstract_summary("speech-abc")
+
+    otter._session.get.assert_called_once_with(
+        OtterAI.API_BASE_URL + "abstract_summary",
+        params={"userid": "user123", "otid": "speech-abc"},
+        timeout=10.0,
+    )
+
+
 @pytest.mark.integration
 def test_list_folder_speeches_integration(logged_in_otter):
     folders_response = logged_in_otter.get_folders()
