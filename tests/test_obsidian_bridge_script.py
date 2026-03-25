@@ -954,3 +954,5 @@ def test_build_payload_degrades_gracefully_when_supplementary_endpoints_fail(
     assert "*Summary processing...*" in speech["summary_markdown"]
     assert "*Action items processing...*" in speech["summary_markdown"]
     assert "*Outline processing...*" in speech["summary_markdown"]
+    assert any("Abstract summary fetch failed for otter-degraded" in m for m in caplog.messages)
+    assert any("Action items fetch returned 503 for otter-degraded" in m for m in caplog.messages)
