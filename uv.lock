@@ -501,7 +501,7 @@ wheels = [
 [[package]]
 name = "otterai-api"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "keyring" },
@@ -510,7 +510,7 @@ dependencies = [
     { name = "requests-toolbelt" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "black" },
     { name = "pytest" },
@@ -519,16 +519,19 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "black", marker = "extra == 'dev'" },
     { name = "click", specifier = ">=8.0" },
     { name = "keyring", specifier = ">=25.0" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "requests" },
     { name = "requests-toolbelt" },
 ]
-provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "packaging"

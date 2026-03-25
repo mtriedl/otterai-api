@@ -15,13 +15,13 @@ Use the plugin setting as a full command template. The plugin replaces `{since}`
 ## Example template
 
 ```text
-python ~/bin/otter_sync.py --since {since} --mode {mode} --output-dir ~/.cache/obsidian-otter-sync
+~/Documents/GitHub/otterai-api/.venv/bin/python ~/Documents/GitHub/otterai-api/obsidian-otter-sync/utils/otter_sync.py --since {since} --mode {mode} --output-dir ~/.cache/obsidian-otter-sync
 ```
 
 Example rendered command for a forced sync:
 
 ```text
-python ~/bin/otter_sync.py --since '1710000001' --mode 'forced' --output-dir ~/.cache/obsidian-otter-sync
+~/Documents/GitHub/otterai-api/.venv/bin/python ~/Documents/GitHub/otterai-api/obsidian-otter-sync/utils/otter_sync.py --since '1710000001' --mode 'forced' --output-dir ~/.cache/obsidian-otter-sync
 ```
 
 ## Stdout envelope contract

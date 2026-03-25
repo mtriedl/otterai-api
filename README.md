@@ -18,14 +18,14 @@ Unofficial Python API for [otter.ai](http://otter.ai)
 
 ## Installation
 
-`pip install .`
+```bash
+uv sync
+```
 
-or in a virtual environment
+For development:
 
 ```bash
-python3 -m venv env
-source env/bin/activate
-pip install .
+make init-dev
 ```
 
 ## Setup

@@ -9,3 +9,4 @@ lcov.info
 tests/output/
 .worktrees/
 .vscode/
+.claude/settings.local.json

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "otterai-api"
 version = "0.1.0"
@@ -15,8 +19,14 @@ dependencies = [
 [project.scripts]
 otter = "otterai.cli:main"
 
-[project.optional-dependencies]
+[tool.hatch.build.targets.wheel]
+packages = ["otterai"]
+
+[dependency-groups]
 dev = ["pytest", "pytest-cov", "black"]
+
+[tool.uv]
+package = true
 
 [tool.pytest.ini_options]
 markers = [

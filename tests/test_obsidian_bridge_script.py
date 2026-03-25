@@ -185,8 +185,8 @@ def test_build_payload_normalizes_speech_detail_into_plugin_schema(monkeypatch):
                 "otid": "otter-123",
                 "share_url": "https://otter.ai/u/example",
                 "speakers": [
-                    {"speaker_name": "Ada"},
-                    {"speaker_name": "Linus"},
+                    {"id": 201, "speaker_name": "Ada"},
+                    {"id": 202, "speaker_name": "Linus"},
                 ],
                 "summary": [
                     {"text": "Reviewed action items"},
@@ -194,8 +194,8 @@ def test_build_payload_normalizes_speech_detail_into_plugin_schema(monkeypatch):
                 ],
                 "transcripts": [
                     {
-                        "speaker_name": "Ada",
-                        "start_time": 0,
+                        "speaker_id": 201,
+                        "start_offset": 0,
                         "transcript": "Welcome back everyone.",
                     }
                 ],
@@ -228,6 +228,68 @@ def test_build_payload_normalizes_speech_detail_into_plugin_schema(monkeypatch):
         }
     ]
     mock_client.get_speech.assert_called_once_with("otter-123")
+
+
+def test_build_payload_resolves_speaker_names_from_speaker_id(monkeypatch):
+    bridge = load_bridge_module()
+    mock_client = MagicMock()
+    mock_client.get_speeches.return_value = {
+        "status": 200,
+        "data": {
+            "speeches": [
+                {
+                    "otid": "otter-speaker-id",
+                    "title": "Speaker ID Meeting",
+                    "created_at": 1710000001,
+                    "modified_time": 1710001801,
+                }
+            ]
+        },
+    }
+    mock_client.get_speech.return_value = {
+        "status": 200,
+        "data": {
+            "speech": {
+                "otid": "otter-speaker-id",
+                "share_url": "https://otter.ai/u/speaker-id",
+                "speakers": [
+                    {"id": 101, "speaker_name": "Ada"},
+                    {"id": 102, "speaker_name": "Linus"},
+                ],
+                "summary": [],
+                "transcripts": [
+                    {
+                        "speaker_id": 101,
+                        "start_offset": 284160,
+                        "transcript": "Hey, your response? Attacking the week.",
+                    },
+                    {
+                        "speaker_id": 102,
+                        "start_offset": 440959,
+                        "transcript": "Hey, strong Monday energy, you know,",
+                    },
+                    {
+                        "start_offset": 513919,
+                        "transcript": "No speaker at all.",
+                    },
+                ],
+            }
+        },
+    }
+
+    monkeypatch.setattr(
+        bridge, "get_authenticated_client", lambda: mock_client, raising=False
+    )
+
+    payload = bridge.build_payload(1710000001)
+
+    segments = payload["speeches"][0]["transcript_segments"]
+    assert segments[0]["speaker_name"] == "Ada"
+    assert segments[0]["timestamp"] == "0:17"
+    assert segments[1]["speaker_name"] == "Linus"
+    assert segments[1]["timestamp"] == "0:27"
+    assert segments[2]["speaker_name"] == "Unknown Speaker"
+    assert segments[2]["timestamp"] == "0:32"
 
 
 def test_build_payload_falls_back_from_invalid_detail_values(monkeypatch):
@@ -413,7 +475,7 @@ def test_build_payload_logs_and_skips_per_speech_failures_without_stdout_polluti
     monkeypatch.setattr(
         bridge, "get_authenticated_client", lambda: mock_client, raising=False
     )
-    monkeypatch.setattr(bridge, "normalize_speech", fake_normalize)
+    monkeypatch.setattr(bridge, "parse_speech", fake_normalize)
 
     with caplog.at_level(logging.WARNING):
         payload = bridge.build_payload(1710000001)
