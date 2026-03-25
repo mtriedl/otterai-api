@@ -124,6 +124,33 @@ def _render_abstract_summary(data):
     return text
 
 
+def _render_action_items(data):
+    """Render action items as markdown checkboxes from the API response."""
+    if not isinstance(data, dict):
+        return "*Action items processing...*"
+    if data.get("process_status") != "finished":
+        return "*Action items processing...*"
+    items = data.get("speech_action_items")
+    if not isinstance(items, list) or not items:
+        return "*Action items processing...*"
+    lines = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        text = _safe_str(item.get("text"))
+        if not text:
+            continue
+        checkbox = "- [x]" if item.get("completed") else "- [ ]"
+        assignee = item.get("assignee")
+        if isinstance(assignee, dict) and _safe_str(assignee.get("name")):
+            lines.append(f"{checkbox} @{assignee['name']} - {text}")
+        else:
+            lines.append(f"{checkbox} {text}")
+    if not lines:
+        return "*Action items processing...*"
+    return "\n".join(lines)
+
+
 def _parse_summary(value):
     """Convert an API summary value (str, dict, or list) to markdown."""
     if isinstance(value, str):

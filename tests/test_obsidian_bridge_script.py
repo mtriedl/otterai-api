@@ -630,3 +630,51 @@ def test_render_abstract_summary_returns_placeholder_for_empty_data():
     bridge = load_bridge_module()
     assert bridge._render_abstract_summary({}) == "*Summary processing...*"
     assert bridge._render_abstract_summary(None) == "*Summary processing...*"
+
+
+def test_render_action_items_with_mixed_items():
+    bridge = load_bridge_module()
+    data = {
+        "process_status": "finished",
+        "speech_action_items": [
+            {
+                "text": "Send the report to the team",
+                "assignee": {"name": "Ada Lovelace"},
+                "completed": False,
+            },
+            {
+                "text": "Review the budget proposal",
+                "assignee": {"name": "Linus Torvalds"},
+                "completed": True,
+            },
+            {
+                "text": "Schedule follow-up meeting",
+                "assignee": None,
+                "completed": False,
+            },
+        ],
+    }
+    result = bridge._render_action_items(data)
+    assert result == (
+        "- [ ] @Ada Lovelace - Send the report to the team\n"
+        "- [x] @Linus Torvalds - Review the budget proposal\n"
+        "- [ ] Schedule follow-up meeting"
+    )
+
+
+def test_render_action_items_returns_placeholder_when_not_finished():
+    bridge = load_bridge_module()
+    data = {"process_status": "processing", "speech_action_items": []}
+    assert bridge._render_action_items(data) == "*Action items processing...*"
+
+
+def test_render_action_items_returns_placeholder_for_empty_data():
+    bridge = load_bridge_module()
+    assert bridge._render_action_items({}) == "*Action items processing...*"
+    assert bridge._render_action_items(None) == "*Action items processing...*"
+
+
+def test_render_action_items_with_empty_array():
+    bridge = load_bridge_module()
+    data = {"process_status": "finished", "speech_action_items": []}
+    assert bridge._render_action_items(data) == "*Action items processing...*"
