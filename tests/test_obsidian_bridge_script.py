@@ -188,9 +188,14 @@ def test_build_payload_normalizes_speech_detail_into_plugin_schema(monkeypatch):
                     {"id": 201, "speaker_name": "Ada"},
                     {"id": 202, "speaker_name": "Linus"},
                 ],
-                "summary": [
-                    {"text": "Reviewed action items"},
-                    {"text": "Confirmed next steps"},
+                "speech_outline": [
+                    {
+                        "text": "Review",
+                        "segments": [
+                            {"text": "Reviewed action items"},
+                            {"text": "Confirmed next steps"},
+                        ],
+                    },
                 ],
                 "transcripts": [
                     {
@@ -201,6 +206,17 @@ def test_build_payload_normalizes_speech_detail_into_plugin_schema(monkeypatch):
                 ],
             }
         },
+    }
+    mock_client.get_abstract_summary.return_value = {
+        "status": 200,
+        "data": {
+            "process_status": "finished",
+            "abstract_summary": {"short_summary": "The team synced on action items."},
+        },
+    }
+    mock_client.get_speech_action_items.return_value = {
+        "status": 200,
+        "data": {"process_status": "finished", "speech_action_items": []},
     }
 
     monkeypatch.setattr(
@@ -217,7 +233,15 @@ def test_build_payload_normalizes_speech_detail_into_plugin_schema(monkeypatch):
             "created_at": 1710000001,
             "modified_time": 1710001801,
             "attendees": ["Ada", "Linus"],
-            "summary_markdown": "- Reviewed action items\n- Confirmed next steps",
+            "summary_markdown": (
+                "The team synced on action items.\n\n"
+                "## Action Items\n\n"
+                "*Action items processing...*\n\n"
+                "## Outline\n\n"
+                "### Review\n\n"
+                "- Reviewed action items\n"
+                "- Confirmed next steps"
+            ),
             "transcript_segments": [
                 {
                     "speaker_name": "Ada",
@@ -276,6 +300,14 @@ def test_build_payload_resolves_speaker_names_from_speaker_id(monkeypatch):
             }
         },
     }
+    mock_client.get_abstract_summary.return_value = {
+        "status": 200,
+        "data": {"process_status": "processing", "abstract_summary": {}},
+    }
+    mock_client.get_speech_action_items.return_value = {
+        "status": 200,
+        "data": {"process_status": "processing", "speech_action_items": []},
+    }
 
     monkeypatch.setattr(
         bridge, "get_authenticated_client", lambda: mock_client, raising=False
@@ -304,7 +336,6 @@ def test_build_payload_falls_back_from_invalid_detail_values(monkeypatch):
                     "title": "Fallback Meeting",
                     "created_at": 1710000100,
                     "modified_time": 1710000200,
-                    "summary": [{"text": "Summary from list data"}],
                 }
             ]
         },
@@ -316,7 +347,6 @@ def test_build_payload_falls_back_from_invalid_detail_values(monkeypatch):
                 "otid": "otter-456",
                 "created_at": None,
                 "modified_time": None,
-                "summary": None,
                 "transcripts": [
                     {
                         "speaker_name": "Ada",
@@ -327,6 +357,14 @@ def test_build_payload_falls_back_from_invalid_detail_values(monkeypatch):
             }
         },
     }
+    mock_client.get_abstract_summary.return_value = {
+        "status": 200,
+        "data": {"process_status": "processing", "abstract_summary": {}},
+    }
+    mock_client.get_speech_action_items.return_value = {
+        "status": 200,
+        "data": {"process_status": "processing", "speech_action_items": []},
+    }
 
     monkeypatch.setattr(
         bridge, "get_authenticated_client", lambda: mock_client, raising=False
@@ -336,7 +374,13 @@ def test_build_payload_falls_back_from_invalid_detail_values(monkeypatch):
 
     assert payload["speeches"][0]["created_at"] == 1710000100
     assert payload["speeches"][0]["modified_time"] == 1710000200
-    assert payload["speeches"][0]["summary_markdown"] == "- Summary from list data"
+    assert payload["speeches"][0]["summary_markdown"] == (
+        "*Summary processing...*\n\n"
+        "## Action Items\n\n"
+        "*Action items processing...*\n\n"
+        "## Outline\n\n"
+        "*Outline processing...*"
+    )
     assert payload["speeches"][0]["transcript_segments"] == [
         {
             "speaker_name": "Ada",
@@ -411,6 +455,14 @@ def test_build_payload_fetches_all_incremental_pages(monkeypatch):
             },
         },
     ]
+    mock_client.get_abstract_summary.return_value = {
+        "status": 200,
+        "data": {"process_status": "processing", "abstract_summary": {}},
+    }
+    mock_client.get_speech_action_items.return_value = {
+        "status": 200,
+        "data": {"process_status": "processing", "speech_action_items": []},
+    }
 
     monkeypatch.setattr(
         bridge, "get_authenticated_client", lambda: mock_client, raising=False
@@ -457,8 +509,16 @@ def test_build_payload_logs_and_skips_per_speech_failures_without_stdout_polluti
             },
         },
     ]
+    mock_client.get_abstract_summary.return_value = {
+        "status": 200,
+        "data": {"process_status": "processing", "abstract_summary": {}},
+    }
+    mock_client.get_speech_action_items.return_value = {
+        "status": 200,
+        "data": {"process_status": "processing", "speech_action_items": []},
+    }
 
-    def fake_normalize(summary_speech, detail_speech):
+    def fake_normalize(summary_speech, detail_speech, summary_markdown=""):
         if detail_speech.get("otid") == "otter-normalize-bad":
             raise ValueError("bad detail shape")
         return {
@@ -489,59 +549,6 @@ def test_build_payload_logs_and_skips_per_speech_failures_without_stdout_polluti
         "Skipping speech otter-normalize-bad: bad detail shape",
     ]
 
-
-def test_build_payload_converts_structured_summary_content_to_markdown(monkeypatch):
-    bridge = load_bridge_module()
-    mock_client = MagicMock()
-    mock_client.get_speeches.return_value = {
-        "status": 200,
-        "data": {
-            "speeches": [
-                {
-                    "otid": "otter-structured",
-                    "title": "Structured Summary",
-                    "created_at": 1710000001,
-                    "modified_time": 1710001801,
-                }
-            ]
-        },
-    }
-    mock_client.get_speech.return_value = {
-        "status": 200,
-        "data": {
-            "speech": {
-                "otid": "otter-structured",
-                "created_at": 1710000001,
-                "modified_time": 1710001801,
-                "summary": {
-                    "outline": [
-                        {"text": "Reviewed roadmap"},
-                        {"text": "Confirmed launch plan"},
-                    ],
-                    "action_items": [
-                        {"text": "Ada to publish notes"},
-                        {"text": "Linus to confirm owners"},
-                    ],
-                },
-                "transcripts": [],
-            }
-        },
-    }
-
-    monkeypatch.setattr(
-        bridge, "get_authenticated_client", lambda: mock_client, raising=False
-    )
-
-    payload = bridge.build_payload(1710000001)
-
-    assert payload["speeches"][0]["summary_markdown"] == (
-        "## Outline\n"
-        "- Reviewed roadmap\n"
-        "- Confirmed launch plan\n\n"
-        "## Action Items\n"
-        "- Ada to publish notes\n"
-        "- Linus to confirm owners"
-    )
 
 
 def test_build_payload_filters_out_speeches_older_than_since_after_fetch(
@@ -586,6 +593,14 @@ def test_build_payload_filters_out_speeches_older_than_since_after_fetch(
             },
         },
     ]
+    mock_client.get_abstract_summary.return_value = {
+        "status": 200,
+        "data": {"process_status": "processing", "abstract_summary": {}},
+    }
+    mock_client.get_speech_action_items.return_value = {
+        "status": 200,
+        "data": {"process_status": "processing", "speech_action_items": []},
+    }
 
     monkeypatch.setattr(
         bridge, "get_authenticated_client", lambda: mock_client, raising=False
