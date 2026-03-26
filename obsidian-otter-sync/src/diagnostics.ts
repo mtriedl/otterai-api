@@ -34,6 +34,8 @@ export interface RunRecord {
   commandSummary: CommandDiagnosticsSummary
   exitCode: number | null
   stderrSnippet: string | null
+  stdoutSnippet: string | null
+  renderedShell: string | null
   speechCount: number
   errorSummary: string | null
   noteFailures: NoteFailureRecord[]

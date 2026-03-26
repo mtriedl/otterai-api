@@ -6,6 +6,8 @@ import { getRequiredSyncSettingsError, type OtterSyncSettings } from '../setting
 import type { RetryEntry, SyncState } from '../state'
 import { synchronizeNotes, type SynchronizeNoteResult, type SynchronizeNotesResult } from '../notes/synchronizer'
 import {
+  getShellSpec,
+  renderCommandTemplate,
   runBridgeCommand,
   summarizeCommandForDiagnostics,
   type BridgeMode,
@@ -16,7 +18,7 @@ import { mergeRetryQueueWithFetches, markRetrySuccess, replaceRetryEntry } from 
 import type { BridgeSpeech } from './schema'
 
 const ONE_DAY_SECONDS = 86_400
-const STDERR_SNIPPET_LIMIT = 500
+const SNIPPET_LIMIT = 2000
 
 type SynchronizerApp = Parameters<typeof synchronizeNotes>[0]['app']
 
@@ -146,12 +148,22 @@ function toRetryEntry(speech: BridgeSpeech, reason: string, attemptedAt: string)
   }
 }
 
-function clipStderr(stderr: string | undefined): string | null {
-  if (!stderr) {
+function buildErrorSummary(message: string, stderr: string | undefined): string {
+  const trimmed = stderr?.trim()
+
+  if (!trimmed) {
+    return message
+  }
+
+  return `${message}\n\nstderr:\n${trimmed}`
+}
+
+function clipSnippet(value: string | undefined): string | null {
+  if (!value) {
     return null
   }
 
-  return stderr.slice(0, STDERR_SNIPPET_LIMIT)
+  return value.slice(0, SNIPPET_LIMIT)
 }
 
 function getPayloadPath(stdout: string): string | null {
@@ -208,13 +220,14 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
     startedAtIso: string,
     fetchWatermarkUsed: number,
     commandSummary: CommandDiagnosticsSummary,
-    error: Error & { stderr?: string; exitCode?: number | null },
+    error: Error & { stderr?: string; stdout?: string; exitCode?: number | null },
     counts: RunCounts = { created: 0, updated: 0, skipped: 0, failed: 0 },
     noteFailures: NoteFailureRecord[] = [],
     synchronizerDiagnostics: RunRecord['synchronizerDiagnostics'] = [],
     fetchedUntil: number | null = null,
     retryReplay = false,
     speechCount = 0,
+    renderedShell: string | null = null,
   ): Promise<never> {
     const endedAtIso = new Date(dependencies.now()).toISOString()
     const isUserInitiated = mode !== 'scheduled'
@@ -229,9 +242,11 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
       counts,
       commandSummary,
       exitCode: error.exitCode ?? null,
-      stderrSnippet: clipStderr(error.stderr),
+      stderrSnippet: clipSnippet(error.stderr),
+      stdoutSnippet: clipSnippet(error.stdout),
+      renderedShell: renderedShell,
       speechCount,
-      errorSummary: error.message,
+      errorSummary: buildErrorSummary(error.message, error.stderr),
       noteFailures,
       synchronizerDiagnostics,
     })
@@ -289,13 +304,28 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         dependencies.notify('Fetching Otter meetings...')
       }
 
+      let renderedShell: string | null = null
+      try {
+        const shell = getShellSpec()
+        const rendered = renderCommandTemplate(
+          plugin.settings.commandTemplate,
+          { since: String(fetchWatermarkUsed), mode },
+        )
+        renderedShell = `${shell.command} ${shell.args.join(' ')} ${rendered}`
+      } catch {
+        // template validation will fail in runBridgeCommand below
+      }
+
       const bridgeResult = await dependencies.runBridgeCommand({
         commandTemplate: plugin.settings.commandTemplate,
         since: String(fetchWatermarkUsed),
         mode,
       }).catch(async (error: unknown) => {
-        const bridgeError = error as Error & { stderr?: string; exitCode?: number | null }
-        return await failRun(mode, startedAtIso, fetchWatermarkUsed, commandSummary, bridgeError)
+        const bridgeError = error as Error & { stderr?: string; stdout?: string; exitCode?: number | null }
+        return await failRun(
+          mode, startedAtIso, fetchWatermarkUsed, commandSummary, bridgeError,
+          undefined, undefined, undefined, undefined, undefined, undefined, renderedShell,
+        )
       })
 
       await plugin.updateState({ lastFetchWatermark: bridgeResult.payload.fetched_until })
@@ -340,6 +370,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
           bridgeResult.payload.fetched_until,
           hadPendingRetries,
           bridgeResult.payload.speeches.length,
+          renderedShell,
         )
       })
 
@@ -384,7 +415,9 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         counts,
         commandSummary,
         exitCode: bridgeResult.exitCode,
-        stderrSnippet: clipStderr(bridgeResult.stderr),
+        stderrSnippet: clipSnippet(bridgeResult.stderr),
+        stdoutSnippet: clipSnippet(bridgeResult.stdout),
+        renderedShell: renderedShell,
         speechCount: bridgeResult.payload.speeches.length,
         errorSummary,
         noteFailures,

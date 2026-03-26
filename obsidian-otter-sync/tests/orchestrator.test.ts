@@ -284,7 +284,7 @@ describe('sync orchestrator', () => {
       exitCode: 7,
       stderrSnippet: 'traceback\nline 2',
       speechCount: 0,
-      errorSummary: 'Python bridge command exited with code 7',
+      errorSummary: 'Python bridge command exited with code 7\n\nstderr:\ntraceback\nline 2',
       noteFailures: [],
     })
     expect(plugin.diagnostics.recentRuns[0]?.commandSummary).toBeDefined()

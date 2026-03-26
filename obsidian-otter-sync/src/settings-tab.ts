@@ -1,8 +1,22 @@
-import { PluginSettingTab, Setting } from 'obsidian'
+import { AbstractInputSuggest, type App, PluginSettingTab, Setting, type TFolder } from 'obsidian'
 
 import type { RunRecord } from './diagnostics'
 import type OtterSyncPlugin from './main'
 import { DEFAULT_SETTINGS, type BackfillMode } from './settings'
+
+class FolderSuggest extends AbstractInputSuggest<TFolder> {
+  protected getSuggestions(query: string): TFolder[] {
+    const lowerQuery = query.toLowerCase()
+    return this.app.vault
+      .getAllFolders(false)
+      .filter((folder) => folder.path.toLowerCase().includes(lowerQuery))
+      .sort((a, b) => a.path.localeCompare(b.path))
+  }
+
+  renderSuggestion(folder: TFolder, el: HTMLElement): void {
+    el.setText(folder.path)
+  }
+}
 
 function formatValue(value: string | null): string {
   if (value === null || value === '') {
@@ -57,6 +71,14 @@ function formatRecentDiagnostics(recentRuns: RunRecord[]): string {
 
       if (run.errorSummary) {
         lines.push(`Error summary: ${run.errorSummary}`)
+      }
+
+      if (run.renderedShell) {
+        lines.push(`Shell command: ${run.renderedShell}`)
+      }
+
+      if (run.stdoutSnippet) {
+        lines.push(`stdout: ${run.stdoutSnippet}`)
       }
 
       if (run.stderrSnippet) {
@@ -204,6 +226,11 @@ export class OtterSyncSettingTab extends PluginSettingTab {
         component.setValue(this.plugin.settings.destinationFolder).onChange(async (value) => {
           await this.plugin.updateSettings({ destinationFolder: value })
         })
+        const suggest = new FolderSuggest(this.app, component.inputEl)
+        suggest.onSelect(async (folder) => {
+          component.setValue(folder.path)
+          await this.plugin.updateSettings({ destinationFolder: folder.path })
+        })
       })
 
     new Setting(this.containerEl)
@@ -225,6 +252,9 @@ export class OtterSyncSettingTab extends PluginSettingTab {
         component.setValue(this.plugin.settings.commandTemplate).onChange(async (value) => {
           await this.plugin.updateSettings({ commandTemplate: value })
         })
+        component.inputEl.style.width = '100%'
+        component.inputEl.style.minHeight = '4em'
+        component.inputEl.style.resize = 'vertical'
       })
 
     new Setting(this.containerEl)
