@@ -295,10 +295,12 @@ export async function synchronizeNotes({
   app,
   destinationFolder,
   speeches,
+  forceUpdate = false,
 }: {
   app: AppLike
   destinationFolder: string
   speeches: BridgeSpeech[]
+  forceUpdate?: boolean
 }): Promise<SynchronizeNotesResult> {
   const diagnostics: SynchronizerDiagnostic[] = []
   const normalizedDestinationFolder = normalizeDestinationFolderPath(destinationFolder)
@@ -417,7 +419,7 @@ export async function synchronizeNotes({
     }
 
     const existingSyncTime = typeof match.frontmatter.sync_time === 'number' ? match.frontmatter.sync_time : 0
-    if (speech.modified_time <= existingSyncTime) {
+    if (!forceUpdate && speech.modified_time <= existingSyncTime) {
       results.push({
         otid: speech.otid,
         status: 'skipped',

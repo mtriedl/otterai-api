@@ -346,6 +346,7 @@ export function createSyncOrchestrator(plugin: PluginLike, providedDependencies:
         app: plugin.app,
         destinationFolder: plugin.settings.destinationFolder,
         speeches: mergedSpeeches,
+        forceUpdate: mode !== 'scheduled',
       }).catch(async (error: unknown) => {
         let pendingRetries = plugin.state.pendingRetries
         const noteSyncError = error as Error & { stderr?: string; exitCode?: number | null }

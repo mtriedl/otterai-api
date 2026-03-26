@@ -240,6 +240,9 @@ export class OtterSyncSettingTab extends PluginSettingTab {
           .addOption('15', 'Every 15 minutes')
           .addOption('30', 'Every 30 minutes')
           .addOption('60', 'Every hour')
+          .addOption('360', 'Every 6 hours')
+          .addOption('720', 'Every 12 hours')
+          .addOption('1440', 'Every 24 hours')
           .setValue(String(this.plugin.settings.syncIntervalMinutes))
           .onChange(async (value) => {
             await this.plugin.updateSettings({ syncIntervalMinutes: Number(value) })

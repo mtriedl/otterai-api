@@ -141,3 +141,4 @@ node_modules/
 # Coverage / test output
 cov.xml
 tests/output/
+obsidian-otter-sync/data.json

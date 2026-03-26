@@ -667,6 +667,20 @@ source: not-an-otter-url
     expect(app.fileContents.get('Meetings/updated.md')).toContain('# Updated Title')
   })
 
+  it('updates notes regardless of sync_time when forceUpdate is true', async () => {
+    const app = createFakeApp()
+    app.fileContents.set('Meetings/existing.md', await readFixture('existing-note.md'))
+
+    const result = await synchronizeNotes({
+      app,
+      destinationFolder: 'Meetings',
+      speeches: [makeSpeech({ modified_time: 1773246700 })],
+      forceUpdate: true,
+    })
+
+    expect(result.notes[0]).toMatchObject({ status: 'updated', path: 'Meetings/existing.md' })
+  })
+
   it('creates the destination folder before writing and stops the batch on folder creation failure', async () => {
     const app = createFakeApp()
     app.failCreateFolderFor.add('Meetings')
