@@ -1,0 +1,23 @@
+{
+  "name": "obsidian-otter-sync",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Desktop-only Obsidian plugin for syncing OtterAI meetings into notes.",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "obsidian": "1.12.3",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "esbuild": "^0.25.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.1"
+  }
+}

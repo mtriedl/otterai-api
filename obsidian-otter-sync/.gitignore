@@ -63,7 +63,6 @@ instance/
 
 # Sphinx documentation
 docs/_build/
-docs/superpowers/
 
 # PyBuilder
 target/
@@ -118,28 +117,3 @@ node_modules/
 *__pycache__**
 *.egg-info
 .env
-
-# Claude Code
-.claude/
-
-# Root-level Node/TS artifacts (duplicates of obsidian-otter-sync/)
-/main.js
-/manifest.json
-/package.json
-/package-lock.json
-/tsconfig.json
-/versions.json
-/esbuild.config.mjs
-/vitest.config.ts
-/src/
-/utils/
-
-# Root-level duplicate TS tests
-/tests/*.test.ts
-/tests/fixtures/
-/tests/helpers/
-
-# Coverage / test output
-cov.xml
-tests/output/
-obsidian-otter-sync/data.json

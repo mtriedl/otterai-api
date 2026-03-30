@@ -1,0 +1,9 @@
+{
+  "id": "otter-sync",
+  "name": "Otter Sync",
+  "version": "0.0.1",
+  "minAppVersion": "1.5.0",
+  "description": "Sync OtterAI meetings into Obsidian notes.",
+  "author": "OpenCode",
+  "isDesktopOnly": true
+}

@@ -1,0 +1,26 @@
+{
+  "fetched_until": 1773246769,
+  "speeches": [
+    {
+      "otid": "speech-1",
+      "source_url": "https://otter.ai/u/speech-1",
+      "title": "Weekly sync",
+      "created_at": 1773246700,
+      "modified_time": 1773246769,
+      "attendees": ["Alice", "Bob"],
+      "summary_markdown": "# Summary\n\n- Reviewed launch blockers",
+      "transcript_segments": [
+        {
+          "speaker_name": "Alice",
+          "timestamp": "0:05",
+          "text": "Hello team"
+        },
+        {
+          "speaker_name": "Bob",
+          "timestamp": "0:08",
+          "text": "Ready to ship"
+        }
+      ]
+    }
+  ]
+}

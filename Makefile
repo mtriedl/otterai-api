@@ -1,8 +1,7 @@
 .PHONY: init-dev format test test-no-integration test-integration
 
 init-dev:
-	uv venv || true
-	uv pip install .[dev]
+	uv sync --dev
 
 format:
 	uv run black .
